@@ -30,13 +30,28 @@ namespace CarturUIHud
         // right, longest on top. Edit mode overrides all of it from the config file.
         // Health and stamina are where Cartur locked them in. Eitr and adrenaline sit below,
         // still being placed - they only appear once the player has a pool at all.
-        private static readonly Vector2 HealthHome = new Vector2(333.75f, 309.25f);
+        private static readonly Vector2 HealthHome = new Vector2(307.5f, 309.25f);
         private static readonly Vector2 StaminaHome = new Vector2(330.75f, 272.75f);
-        private static readonly Vector2 EitrHome = new Vector2(330.75f, 236f);
-        private static readonly Vector2 AdrenalineHome = new Vector2(330.75f, 199.5f);
+        // Eitr and adrenaline share the third row, one 36.5 step below stamina. A melee
+        // character has adrenaline and no eitr, a mage the reverse, and the rare build with
+        // both is running eitr food it would not normally eat - so adrenaline takes the slot
+        // when it is there and eitr falls back to it otherwise. Same x as stamina, so the two
+        // thin bars line up exactly.
+        // Third row sits on stamina's x, so the two thin bars share a left edge and the same
+        // geometry - which is why they end up sharing a length figure too.
+        private static readonly Vector2 EitrHome = new Vector2(330.75f, 219.75f);
+        private static readonly Vector2 AdrenalineHome = new Vector2(330.75f, 219.75f);
 
         // Health's frame reads better a shade tighter than the others.
         private const float HealthFrame = 0.85f;
+
+        // Each bar starts at a different x and carries a different ornament width, so a single
+        // shared length left their tips 33 units apart. These are solved from
+        //   window = 896.76 - x - rightOrnament
+        // so that at its own max every bar ends on the same vertical line. 896.76 is the health
+        // bar's own tip, which is why its own figure is 1 - it is the bar the length was
+        // derived from and the one that stays put.
+        private const float HealthLength = 1f, StaminaLength = 0.9728f, RowThreeLength = 0.9728f;
         private const float FoodSize = 82f, PowerSize = 104f;
 
         // Cartur settled these and confirmed them, so the three diamonds and the power box are
@@ -86,7 +101,6 @@ namespace CarturUIHud
         private static MethodInfo s_getQuickSlotItems;
 
         internal static BepInEx.Logging.ManualLogSource Log;
-        internal static BepInEx.Configuration.ConfigEntry<BepInEx.Configuration.KeyboardShortcut> s_dumpKey;
 
         [HarmonyPatch(typeof(Hud), "Awake")]
         [HarmonyPostfix]
@@ -106,22 +120,22 @@ namespace CarturUIHud
             HudLayout.Reset(__instance.m_healthText != null ? __instance.m_healthText.font : null);
             s_started = false;
 
-            Build(0, HealthFull, "health", "Health", HealthHeight, HealthFrame, HealthHome, hudroot,
+            Build(0, HealthFull, "health", "Health", HealthHeight, HealthFrame, HealthLength, HealthHome, hudroot,
                 __instance.m_healthBarRoot, __instance.m_healthBarRoot,
                 __instance.m_healthBarFast, __instance.m_healthBarSlow,
                 __instance.m_healthText, __instance.m_healthAnimator);
 
-            Build(1, StaminaFull, "stamina", "Stamina", StatHeight, 1f, StaminaHome, hudroot,
+            Build(1, StaminaFull, "stamina", "Stamina", StatHeight, 1f, StaminaLength, StaminaHome, hudroot,
                 __instance.m_staminaBar2Root, __instance.m_staminaBar2Root?.Find("Stamina") as RectTransform,
                 __instance.m_staminaBar2Fast, __instance.m_staminaBar2Slow,
                 __instance.m_staminaText, __instance.m_staminaAnimator);
 
-            Build(2, EitrFull, "eitr", "Eitr", StatHeight, 1f, EitrHome, hudroot,
+            Build(2, EitrFull, "eitr", "Eitr", StatHeight, 1f, RowThreeLength, EitrHome, hudroot,
                 __instance.m_eitrBarRoot, __instance.m_eitrBarRoot?.Find("Stamina") as RectTransform,
                 __instance.m_eitrBarFast, __instance.m_eitrBarSlow,
                 __instance.m_eitrText, __instance.m_eitrAnimator);
 
-            Build(3, AdrenalineFull, "adrenaline", "Adrenaline", StatHeight, 1f, AdrenalineHome, hudroot,
+            Build(3, AdrenalineFull, "adrenaline", "Adrenaline", StatHeight, 1f, RowThreeLength, AdrenalineHome, hudroot,
                 __instance.m_adrenalineBarRoot, __instance.m_adrenalineBarRoot?.Find("Stamina") as RectTransform,
                 __instance.m_adrenalineBarFast, __instance.m_adrenalineBarSlow,
                 __instance.m_adrenalineText, __instance.m_adrenalineAnimator);
@@ -142,7 +156,7 @@ namespace CarturUIHud
 
         // --- bars ---
 
-        private static void Build(int index, float fullStat, string key, string label, float height, float frameScale, Vector2 position,
+        private static void Build(int index, float fullStat, string key, string label, float height, float frameScale, float length, Vector2 position,
             Transform hudroot, RectTransform panel, RectTransform inner,
             GuiBar fast, GuiBar slow, TMP_Text text, Animator animator)
         {
@@ -207,8 +221,12 @@ namespace CarturUIHud
             // paint over them.
             panel.SetAsFirstSibling();
 
-            HudLayout.Register(key, label, panel, panel, position, height,
-                bar.ApplyHeight, bar.ApplyLength, bar.ApplyFrame, frameScale);
+            // Hit-test and outline against the frame, not the panel: the panel is only the
+            // window between the ornaments, so an outline on it stopped short of the knot and
+            // the point and did not match what you see.
+            RectTransform outline = bar.Frame != null ? (RectTransform)bar.Frame.transform : panel;
+            HudLayout.Register(key, label, panel, outline, position, height,
+                bar.ApplyHeight, bar.ApplyLength, bar.ApplyFrame, frameScale, length);
         }
 
         /// <summary>
@@ -483,9 +501,6 @@ namespace CarturUIHud
         {
             HudLayout.Tick();
 
-            if (s_dumpKey != null && s_dumpKey.Value.IsDown())
-                HudDump.Write(__instance);
-
             Player player = Player.m_localPlayer;
             if (player == null)
                 return;
@@ -498,15 +513,19 @@ namespace CarturUIHud
             // Eitr and adrenaline are hidden outright without a pool, rather than vanilla's
             // fade, which would leave an empty frame on screen now the frame is visible. Both
             // are forced on in edit mode so they can be placed.
+            // Both sit in the third row, so only one of them draws. Adrenaline wins it: with
+            // both pools up you are a melee character who happens to have eaten eitr food, and
+            // adrenaline is the one changing several times a second.
             float maxEitr = player.GetMaxEitr();
-            Bars[2].Show(maxEitr > 0f || edit);
-            if (maxEitr > 0f)
-                Bars[2].Drive(player.GetEitr(), maxEitr);
-
             float maxAdrenaline = player.GetMaxAdrenaline();
+
             Bars[3].Show(maxAdrenaline > 0f || edit);
             if (maxAdrenaline > 0f)
                 Bars[3].Drive(player.GetAdrenaline(), maxAdrenaline);
+
+            Bars[2].Show((maxEitr > 0f && maxAdrenaline <= 0f) || edit);
+            if (maxEitr > 0f)
+                Bars[2].Drive(player.GetEitr(), maxEitr);
 
             if (edit && __instance.m_gpRoot != null && !__instance.m_gpRoot.gameObject.activeSelf)
                 __instance.m_gpRoot.gameObject.SetActive(true);

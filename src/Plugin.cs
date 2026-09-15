@@ -14,7 +14,7 @@ namespace CarturUIHud
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
         public const string PluginName = "Carturs UI - HUD";
-        public const string PluginVersion = "0.2.0";
+        public const string PluginVersion = "1.0.0";
 
         private void Awake()
         {
@@ -29,15 +29,12 @@ namespace CarturUIHud
                     return;
                 }
 
-                ConfigEntry<KeyboardShortcut> editKey = Config.Bind(
-                    "Layout", "editKey", new KeyboardShortcut(KeyCode.F6),
-                    "Toggles layout edit mode: drag a piece to move it, wheel over it to scale it. Saved on exit.");
-                HudLayout.Init(Config, editKey);
-
-                HudDump.Log = Logger;
-                HudSkin.s_dumpKey = Config.Bind(
-                    "Layout", "dumpKey", new KeyboardShortcut(KeyCode.F7),
-                    "Diagnostic: writes BepInEx/CarturUIHud_bars.txt describing the bars as they currently are.");
+                ConfigEntry<bool> editMode = Config.Bind(
+                    "Layout", "editMode", false,
+                    "Turn on to arrange the HUD: drag a piece to move it, wheel to size it, "
+                    + "shift+wheel for a bar's length, ctrl+wheel and ctrl+drag for its frame. "
+                    + "Turn off when done - the layout is saved either way.");
+                HudLayout.Init(Config, editMode);
 
                 // A mod that throws during load takes the whole chainloader with it.
                 var harmony = new Harmony(PluginGuid);

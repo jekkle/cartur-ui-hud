@@ -11,3 +11,5 @@ package/plugins/
 *.zip
 __pycache__/
 *.pyc
+dist/
+package/plugins/

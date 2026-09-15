@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Reflection;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -52,9 +53,13 @@ namespace CarturUIHud
         private static readonly FieldInfo s_mouseCapture = AccessTools.Field(typeof(GameCamera), "m_mouseCapture");
 
         private static ConfigFile s_config;
-        private static ConfigEntry<KeyboardShortcut> s_editKey;
+        private static ConfigEntry<bool> s_editMode;
         private static TMP_FontAsset s_font;
         private static Sprite s_white;
+
+        private static FileSystemWatcher s_watcher;
+        private static volatile bool s_reloadPending;
+        private static float s_ignoreWritesUntil;
 
         private static bool s_editing;
         private static Element s_grabbed;
@@ -65,10 +70,62 @@ namespace CarturUIHud
 
         public static bool Editing => s_editing;
 
-        public static void Init(ConfigFile config, ConfigEntry<KeyboardShortcut> editKey)
+        public static void Init(ConfigFile config, ConfigEntry<bool> editMode)
         {
             s_config = config;
-            s_editKey = editKey;
+            s_editMode = editMode;
+
+            // Off, or every frame of a drag writes the whole file to disk.
+            s_config.SaveOnConfigSet = false;
+            Watch();
+        }
+
+        /// <summary>
+        /// Reloads the config when the file changes on disk, so ticking editMode in any editor -
+        /// Configuration Manager, r2modman's, a text editor - takes effect without a restart.
+        /// That is what keeps Configuration Manager optional rather than a hard dependency.
+        /// </summary>
+        private static void Watch()
+        {
+            try
+            {
+                string path = s_config.ConfigFilePath;
+                s_watcher = new FileSystemWatcher(Path.GetDirectoryName(path), Path.GetFileName(path))
+                {
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size
+                };
+                // Fires on a background thread, so it only raises a flag - Tick does the work.
+                s_watcher.Changed += (sender, args) => s_reloadPending = true;
+                s_watcher.EnableRaisingEvents = true;
+            }
+            catch (Exception e)
+            {
+                Log.LogWarning("could not watch the config file, changes to it will need a restart: " + e.Message);
+            }
+        }
+
+        private static void Persist()
+        {
+            // Our own write would otherwise bounce straight back through the watcher.
+            s_ignoreWritesUntil = Time.realtimeSinceStartup + 1f;
+            s_config.Save();
+        }
+
+        private static void ReloadFromConfig()
+        {
+            foreach (Element e in s_elements)
+            {
+                if (!TryParse(e.Entry.Value, out Vector2 position, out float scale, out float length,
+                        out float frameScale, out Vector2 frameOffset))
+                    continue;
+                e.Move.anchoredPosition = position;
+                e.Scale = Mathf.Clamp(scale, MinScale, MaxScale);
+                e.Length = Mathf.Clamp(length, MinScale, MaxScale);
+                e.FrameScale = Mathf.Clamp(frameScale, MinScale, MaxScale);
+                e.FrameOffset = frameOffset;
+                Apply(e);
+            }
+            Log.LogInfo("config reloaded from disk");
         }
 
         /// <summary>Called once per Hud.Awake, before anything registers.</summary>
@@ -90,7 +147,7 @@ namespace CarturUIHud
             s_white = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
         }
 
-        public static void Register(string key, string label, RectTransform move, RectTransform hit, Vector2 fallbackPosition, float fallbackScale = 1f, Action<float> onScale = null, Action<float> onLength = null, Action<float, Vector2> onFrame = null, float fallbackFrameScale = 1f)
+        public static void Register(string key, string label, RectTransform move, RectTransform hit, Vector2 fallbackPosition, float fallbackScale = 1f, Action<float> onScale = null, Action<float> onLength = null, Action<float, Vector2> onFrame = null, float fallbackFrameScale = 1f, float fallbackLength = 1f)
         {
             if (move == null || hit == null)
                 return;
@@ -104,7 +161,7 @@ namespace CarturUIHud
                 OnScale = onScale,
                 OnLength = onLength,
                 OnFrame = onFrame,
-                Entry = s_config.Bind("Layout", key, Format(fallbackPosition, fallbackScale, 1f, fallbackFrameScale, Vector2.zero),
+                Entry = s_config.Bind("Layout", key, Format(fallbackPosition, fallbackScale, fallbackLength, fallbackFrameScale, Vector2.zero),
                     "Layout of the " + label + ". Written by edit mode; x,y,size,length,frameSize,frameX,frameY.")
             };
 
@@ -112,7 +169,7 @@ namespace CarturUIHud
             {
                 position = fallbackPosition;
                 scale = fallbackScale;
-                length = 1f;
+                length = fallbackLength;
                 frameScale = fallbackFrameScale;
                 frameOff = Vector2.zero;
                 Log.LogWarning("could not read layout for " + key + " (\"" + element.Entry.Value + "\") - using the default");
@@ -131,7 +188,19 @@ namespace CarturUIHud
         /// <summary>Driven from the Hud.Update postfix.</summary>
         public static void Tick()
         {
-            if (s_editKey.Value.IsDown())
+            if (s_reloadPending)
+            {
+                s_reloadPending = false;
+                if (Time.realtimeSinceStartup > s_ignoreWritesUntil)
+                {
+                    s_config.Reload();
+                    ReloadFromConfig();
+                }
+            }
+
+            // Driven from the config rather than a key, so it lives with the rest of the
+            // settings and cannot be hit by accident mid-fight.
+            if (s_editMode.Value != s_editing)
                 Toggle();
 
             if (!s_editing)
@@ -157,6 +226,7 @@ namespace CarturUIHud
             else if (Input.GetMouseButtonUp(0) && s_grabbed != null)
             {
                 Save(s_grabbed);
+                Persist();
                 s_grabbed = null;
             }
 
@@ -179,13 +249,14 @@ namespace CarturUIHud
                         under.Scale = Mathf.Clamp(under.Scale + step, MinScale, MaxScale);
                     Apply(under);
                     Save(under);
+                    Persist();
                 }
             }
         }
 
         private static void Toggle()
         {
-            s_editing = !s_editing;
+            s_editing = s_editMode.Value;
 
             foreach (Element e in s_elements)
             {
@@ -207,11 +278,11 @@ namespace CarturUIHud
             if (!s_editing)
             {
                 s_grabbed = null;
-                s_config.Save();
+                Persist();
             }
 
             Log.LogInfo(s_editing
-                ? "layout edit on - drag: move | wheel: size | shift+wheel: bar length | ctrl+wheel: frame size | ctrl+drag: frame offset | " + s_editKey.Value + ": finish"
+                ? "layout edit on - drag: move | wheel: size | shift+wheel: bar length | ctrl+wheel: frame size | ctrl+drag: frame offset"
                 : "layout edit off - saved to " + s_config.ConfigFilePath);
         }
 
@@ -278,11 +349,11 @@ namespace CarturUIHud
 
             Image tint = e.Overlay.AddComponent<Image>();
             tint.sprite = s_white;
-            tint.color = new Color(0.90f, 0.70f, 0.12f, 0.25f);
+            tint.color = new Color(0.95f, 0.75f, 0.15f, 0.10f);
             tint.raycastTarget = false;
 
             Outline outline = e.Overlay.AddComponent<Outline>();
-            outline.effectColor = new Color(1f, 0.92f, 0.25f, 1f);
+            outline.effectColor = new Color(1f, 0.92f, 0.25f, 0.85f);
             outline.effectDistance = new Vector2(2f, -2f);
             outline.useGraphicAlpha = false;
 
@@ -301,7 +372,7 @@ namespace CarturUIHud
             text.font = s_font;
             text.text = e.Label;
             text.fontSize = 13f;
-            text.color = Color.white;
+            text.color = new Color(1f, 0.95f, 0.75f, 0.85f);
             text.alignment = TextAlignmentOptions.Center;
             text.raycastTarget = false;
         }
