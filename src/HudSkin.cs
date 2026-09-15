@@ -150,8 +150,7 @@ namespace CarturUIHud
             HudLayout.Register("cluster", "Food + power", cluster, cluster, ClusterHome, ClusterScale);
 
             Log.LogInfo("driving 4 bars, skinned 3 food boxes and the guardian power box"
-                + (s_quickSlotMode ? ", food from Equipment and Quick Slots" : ", food from vanilla")
-                + (AssetLoader.PowerFrameIsPlaceholder ? "; power box is using the food diamond as a placeholder" : ""));
+                + (s_quickSlotMode ? ", food from Equipment and Quick Slots" : ", food from vanilla"));
         }
 
         // --- bars ---
@@ -464,7 +463,7 @@ namespace CarturUIHud
             Image bkg = root.Find("Bkg")?.GetComponent<Image>();
             if (bkg != null)
             {
-                bkg.sprite = AssetLoader.PowerFrame;
+                bkg.sprite = AssetLoader.FoodFrame;
                 bkg.type = Image.Type.Simple;
                 bkg.preserveAspect = true;
                 bkg.color = Color.white;

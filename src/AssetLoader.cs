@@ -57,15 +57,15 @@ namespace CarturUIHud
         /// </summary>
         internal static float MinWindowUnits => 24f;
 
-        private static Texture2D s_barFrame, s_barFill, s_foodFrame, s_powerFrame;
+        private static Texture2D s_barFrame, s_barFill, s_foodFrame;
 
         public static Sprite BarFrame { get; private set; }
         public static Sprite BarFill { get; private set; }
+        /// <summary>
+        /// The diamond. Used for the three food boxes and for the guardian power box - by
+        /// design, not as a stand-in: the power box is meant to read as one of the same family.
+        /// </summary>
         public static Sprite FoodFrame { get; private set; }
-        public static Sprite PowerFrame { get; private set; }
-
-        /// <summary>True when the power box is wearing the food diamond as a stand-in.</summary>
-        public static bool PowerFrameIsPlaceholder { get; private set; }
 
         public static string AssetsDir { get; private set; }
 
@@ -76,7 +76,6 @@ namespace CarturUIHud
             s_barFrame = Load("bar_frame.png", log);
             s_barFill = Load("bar_fill.png", log);
             s_foodFrame = Load("food_frame.png", log);
-            s_powerFrame = Load("power_frame.png", log);
 
             return s_barFrame != null && s_barFill != null && s_foodFrame != null;
         }
@@ -105,9 +104,6 @@ namespace CarturUIHud
 
             // Drawn Simple with preserveAspect, so ppu only has to not be zero.
             FoodFrame = Make(s_foodFrame, Vector4.zero, referencePixelsPerUnit);
-
-            PowerFrameIsPlaceholder = s_powerFrame == null;
-            PowerFrame = Make(PowerFrameIsPlaceholder ? s_foodFrame : s_powerFrame, Vector4.zero, referencePixelsPerUnit);
 
             log.LogInfo($"canvas referencePixelsPerUnit {referencePixelsPerUnit}; frame ppu {framePpu:0.##}, fill ppu {fillPpu:0.##}, ornaments {FrameLeftUnits:0.#} + {FrameRightUnits:0.#}, natural window {NaturalWindowUnits:0.#}, at {BaseBarHeight} tall");
         }

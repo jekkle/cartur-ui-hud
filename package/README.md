@@ -3,7 +3,7 @@
 A hand-drawn bronze HUD for Valheim. Norse knotwork frames on the bars, diamond frames
 on the food, and every piece placed and sized by you.
 
-![The HUD in place](https://raw.githubusercontent.com/jekkle/cartur-ui-hud/main/docs/images/hud-closeup.png)
+![The HUD in place](https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/hud-closeup.png)
 
 Client-side. No server install needed, works in multiplayer.
 
@@ -45,7 +45,7 @@ off when you are done; the layout saves either way and survives restarts.
 The three food diamonds and the power box move together as one group. The four bars are
 individual, so you can stack them how you like.
 
-![In world](https://raw.githubusercontent.com/jekkle/cartur-ui-hud/main/docs/images/hud-in-world.png)
+![In world](https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/hud-in-world.png)
 
 ## Compatibility
 
