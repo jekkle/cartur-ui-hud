@@ -1,5 +1,14 @@
 # Cartur's UI — HUD
 
+*Free, and always will be — if it improved your game you can [tip me on Patreon](https://www.patreon.com/c/cartur).*
+
+**More from Cartur:** [HD Blood](https://thunderstore.io/c/valheim/p/Cartur/Carturs_HD_Blood/) ·
+[Map Pins](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Map_Pins/) ·
+[Compass and Clock](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Compass_and_Clock/) ·
+[Safe Stamina](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Safe_Stamina/) ·
+[Follow Command](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Follow_Command/) ·
+[Flooring](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Flooring/)
+
 A hand-drawn bronze HUD for Valheim. Norse knotwork frames on the bars, diamond frames
 on the food, and every piece placed and sized by you.
 
@@ -69,9 +78,3 @@ Hand-editable if you want exact numbers — changes apply live.
 
 This is the HUD. More of the interface is coming as separate mods, so you can take the
 parts you want.
-
-Also by Cartur: [Compass and Clock](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Compass_and_Clock/),
-[Map Pins](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Map_Pins/),
-[HD Blood](https://thunderstore.io/c/valheim/p/Cartur/Carturs_HD_Blood/),
-[Safe Stamina](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Safe_Stamina/),
-[Follow Command](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Follow_Command/).

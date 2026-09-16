@@ -1,0 +1,61 @@
+[size=4][b]A hand-drawn bronze HUD. Norse knotwork on the bars, diamond frames on the food, and every piece placed and sized by you.[/b][/size]
+
+Client-side. No server install needed, works in multiplayer.
+
+[size=4][b]What you get[/b][/size]
+
+[list]
+[*][b]Health, stamina, eitr and adrenaline bars[/b] in a sliced bronze frame that keeps its ornaments crisp at any length. The knotwork fill is uncovered as the bar drains rather than squashed.
+[*][b]Three food diamonds[/b] with the countdown on each. With [url=https://www.nexusmods.com/valheim/mods/1136]Equipment and Quick Slots[/url] installed they show your quick slot items instead, and a slot holding something you are currently digesting still shows that food's timer.
+[*][b]The guardian power[/b] in its own frame, with the name and Ready/cooldown over the icon.
+[*][b]Eitr and adrenaline share a row[/b] - whichever pool you actually have is the one drawn. Neither appears at all until you have one.
+[/list]
+
+Bars grow with your maximum, not just your current value: eat, and the bar itself gets longer; let the food run out and it shrinks back. Each bar reaches the same length at its own ceiling, so a 100-point adrenaline pool reads as full as a 325-point health pool.
+
+[size=4][b]Arranging it[/b][/size]
+
+Everything is movable. Turn on [b]editMode[/b] in the config - with Configuration Manager that is a tick box in game, or edit the config file in r2modman or a text editor and it applies immediately without a restart.
+
+[list]
+[*][b]drag[/b] - move a piece
+[*][b]wheel[/b] - size it: bar height, or overall scale on the food and power group
+[*][b]shift + wheel[/b] - a bar's length
+[*][b]ctrl + wheel[/b] - how far the frame's ornaments stand off the fill
+[*][b]ctrl + drag[/b] - nudge the frame against the fill
+[/list]
+
+Player input is held while edit mode is on, so a drag does not swing your axe. Turn it off when you are done; the layout saves either way and survives restarts.
+
+The three food diamonds and the power box move together as one group. The four bars are individual, so you can stack them how you like.
+
+[size=4][b]Config[/b][/size]
+
+BepInEx/config/com.jekkle.valheim.carturuihud.cfg, written on first run. One [b]editMode[/b] switch and one line per piece, written as x,y,size,length,frameSize,frameX,frameY. Hand-editable if you want exact numbers - changes apply live.
+
+[size=4][b]Compatibility[/b][/size]
+
+This mod takes over the vanilla health, stamina, eitr and adrenaline bars outright - it skips the game's own update for each of them and draws them itself. [b]It will fight any other mod that replaces those bars[/b], including Auga and AugaLite. Pick one.
+
+Everything else is left alone. It does not touch the inventory, the build menu, the map or the status effects, and mods that change those are unaffected.
+
+Known good alongside: Equipment and Quick Slots, Epic Loot, BetterArchery, Jotunn.
+
+[size=4][b]Part of a set[/b][/size]
+
+This is the HUD. More of the interface is coming as separate mods, so you can take the parts you want.
+
+[size=4][b]Installation[/b][/size]
+
+Requires BepInEx. Unpack into your Valheim folder so the DLL lands in BepInEx/plugins, with its assets folder beside it.
+
+[size=4][b]More from Cartur[/b][/size]
+
+[url=https://www.nexusmods.com/valheim/mods/3679]HD Blood[/url] - higher resolution ground blood and a real burst on every hit.
+[url=https://www.nexusmods.com/valheim/mods/3681]Map Pins[/url] - pins the world onto your map as you explore it.
+[url=https://www.nexusmods.com/valheim/mods/3684]Compass and Clock[/url] - a Skyrim-style compass bar across the top of the screen.
+[url=https://www.nexusmods.com/valheim/mods/3685]Safe Stamina[/url] - stamina costs nothing while no enemy is near.
+[url=https://www.nexusmods.com/valheim/mods/3728]Follow Command[/url] - every tamed animal takes the follow command.
+[url=https://www.nexusmods.com/valheim/mods/3760]Flooring[/url] - floors count as roof, and fires sit on them.
+
+Free, and always will be - if it improved your game you can [url=https://www.patreon.com/c/cartur]tip me on Patreon[/url].

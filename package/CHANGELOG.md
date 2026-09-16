@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2
+
+- Listing only. New icon: a shot of the HUD in game, so the Thunderstore tile and the
+  Nexus page show the same picture. No code change.
+
+## 1.0.1
+
+- Listing only. Links the rest of the Cartur mods, Flooring included, in the same
+  place the others carry theirs. No code change.
+
 ## 1.0.0
 
 First release.
