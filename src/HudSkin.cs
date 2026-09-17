@@ -90,6 +90,19 @@ namespace CarturUIHud
 
         internal const string EaqsGuid = "randyknapp.mods.equipmentandquickslots";
 
+        // Food timers: the last minute blinks red, and a quick slot
+        // holding food nobody has eaten yet says so instead of showing a blank box.
+        //
+        // A flat minute, every food. Cartur's call, and the reason is that the blink is a
+        // signal rather than a gauge: it always means the same thing, so you learn it once and
+        // never work out what a tenth of this particular stew is worth.
+        private const float LowFoodSeconds = 60f;
+        private const float BlinkSpeed = 2.5f;
+        private static readonly Color LowFoodDim = new Color(0.65f, 0.10f, 0.10f, 0.75f);
+        private static readonly Color LowFoodBright = new Color(1f, 0.25f, 0.20f, 1f);
+        private const string EatLabel = "Eat";
+        private static readonly Color EatColour = new Color(1f, 0.85f, 0.45f, 0.9f);
+
         // health, stamina, eitr, adrenaline
         internal static readonly BarSkin[] Bars = { new BarSkin(), new BarSkin(), new BarSkin(), new BarSkin() };
 
@@ -99,6 +112,9 @@ namespace CarturUIHud
         private static bool s_quickSlotMode;
         private static bool s_started;
         private static MethodInfo s_getQuickSlotItems;
+        private static MethodInfo s_getQuickSlots;      // Slots.GetQuickSlots() -> Slot[]
+        private static MethodInfo s_getShortcutText;    // Slot.GetShortcutText() -> string
+        private static readonly TMP_Text[] s_foodKeys = new TMP_Text[3];
 
         internal static BepInEx.Logging.ManualLogSource Log;
 
@@ -117,7 +133,7 @@ namespace CarturUIHud
             Canvas canvas = __instance.GetComponentInParent<Canvas>();
             AssetLoader.BuildSprites(canvas != null ? canvas.referencePixelsPerUnit : 100f, Log);
 
-            HudLayout.Reset(__instance.m_healthText != null ? __instance.m_healthText.font : null);
+            HudLayout.Reset("hud", __instance.m_healthText != null ? __instance.m_healthText.font : null);
             s_started = false;
 
             Build(0, HealthFull, "health", "Health", HealthHeight, HealthFrame, HealthLength, HealthHome, hudroot,
@@ -147,7 +163,7 @@ namespace CarturUIHud
             RectTransform cluster = MakeCluster(hudroot);
             SkinFood(__instance, cluster);
             SkinPower(__instance, cluster);
-            HudLayout.Register("cluster", "Food + power", cluster, cluster, ClusterHome, ClusterScale);
+            HudLayout.Register("hud", "cluster", "Food + power", cluster, cluster, ClusterHome, ClusterScale);
 
             Log.LogInfo("driving 4 bars, skinned 3 food boxes and the guardian power box"
                 + (s_quickSlotMode ? ", food from Equipment and Quick Slots" : ", food from vanilla"));
@@ -224,7 +240,7 @@ namespace CarturUIHud
             // window between the ornaments, so an outline on it stopped short of the knot and
             // the point and did not match what you see.
             RectTransform outline = bar.Frame != null ? (RectTransform)bar.Frame.transform : panel;
-            HudLayout.Register(key, label, panel, outline, position, height,
+            HudLayout.Register("hud", key, label, panel, outline, position, height,
                 bar.ApplyHeight, bar.ApplyLength, bar.ApplyFrame, frameScale, length);
         }
 
@@ -319,6 +335,8 @@ namespace CarturUIHud
                     ((RectTransform)icon.transform).sizeDelta = new Vector2(-margin, -margin);
                 }
 
+                s_foodKeys[i] = KeyLabel(rt, i);
+
                 // Vanilla hangs the countdown off the box's bottom-right corner, which on a
                 // diamond is empty space outside the frame. Centre it along the lower edge.
                 s_foodTimes[i] = hud.m_foodTime.Length > i ? hud.m_foodTime[i] : null;
@@ -341,6 +359,54 @@ namespace CarturUIHud
             hud.m_foodTime = Array.Empty<TMP_Text>();
         }
 
+        /// <summary>
+        /// The quick slot's key on its own diamond, mirroring the countdown: key at the top,
+        /// timer at the bottom, icon between them. Built once per box and then only its text
+        /// changes, so nothing is allocated per frame.
+        /// </summary>
+        private static TMP_Text KeyLabel(RectTransform box, int index)
+        {
+            var go = new GameObject("CarturUIHud_Key", typeof(RectTransform));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(box, false);
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.sizeDelta = new Vector2(FoodSize, 20f);
+            rt.anchoredPosition = new Vector2(0f, -FoodSize * 0.2f);
+
+            var text = go.AddComponent<TextMeshProUGUI>();
+            text.font = s_foodTimes[index] != null ? s_foodTimes[index].font : null;
+            text.fontSize = 14f;
+            text.alignment = TextAlignmentOptions.Center;
+            text.color = new Color(0.60f, 0.82f, 1f, 0.95f);   // vanilla's own key-hint blue
+            text.raycastTarget = false;
+            text.text = string.Empty;
+            return text;
+        }
+
+        /// <summary>Refreshes the key letters. Called with the icons, not per frame.</summary>
+        private static void RefreshQuickSlotKeys()
+        {
+            if (s_getQuickSlots == null || s_getShortcutText == null)
+                return;
+
+            if (!(s_getQuickSlots.Invoke(null, null) is System.Collections.IList slots))
+                return;
+
+            for (int i = 0; i < s_foodKeys.Length; i++)
+            {
+                TMP_Text label = s_foodKeys[i];
+                if (label == null)
+                    continue;
+                string key = i < slots.Count && slots[i] != null
+                    ? s_getShortcutText.Invoke(slots[i], null) as string
+                    : null;
+                key = key ?? string.Empty;
+                if (label.text != key)
+                    label.text = key;
+            }
+        }
+
         private static bool ResolveEaqs()
         {
             Type api = AccessTools.TypeByName("EquipmentAndQuickSlots.API");
@@ -350,6 +416,15 @@ namespace CarturUIHud
                 Log.LogWarning("Equipment and Quick Slots is loaded but API.GetQuickSlotItems is gone - falling back to vanilla food");
                 return false;
             }
+
+            // The key each quick slot answers to, for the label on its diamond. Both of these
+            // are public on EQAS; only the assembly reference is missing, hence reflection.
+            Type slots = AccessTools.TypeByName("EquipmentAndQuickSlots.Slots");
+            s_getQuickSlots = slots?.GetMethod("GetQuickSlots", BindingFlags.Public | BindingFlags.Static);
+            Type slot = AccessTools.TypeByName("EquipmentAndQuickSlots.Slots+Slot");
+            s_getShortcutText = slot?.GetMethod("GetShortcutText", BindingFlags.Public | BindingFlags.Instance);
+            if (s_getQuickSlots == null || s_getShortcutText == null)
+                Log.LogInfo("Equipment and Quick Slots hotkey text not available - diamonds go without a key label");
 
             // EQAS raises this whenever a slot's item changes, so the boxes never need a
             // per-frame refresh of their own.
@@ -371,6 +446,8 @@ namespace CarturUIHud
         {
             if (s_getQuickSlotItems == null || s_foodFrames == null)
                 return;
+
+            RefreshQuickSlotKeys();
 
             var items = s_getQuickSlotItems.Invoke(null, null) as IList<ItemDrop.ItemData>;
 
@@ -429,24 +506,37 @@ namespace CarturUIHud
 
                 if (match == null)
                 {
-                    if (text.gameObject.activeSelf)
-                        text.gameObject.SetActive(false);
+                    // The slot holds food that is not being digested: that is an invitation, not
+                    // an empty box. Vanilla has nothing to say here because vanilla's three boxes
+                    // only ever show food already eaten.
+                    if (!text.gameObject.activeSelf)
+                        text.gameObject.SetActive(true);
+                    if (text.text != EatLabel)
+                        text.text = EatLabel;
+                    text.color = EatColour;
                     continue;
                 }
 
                 if (!text.gameObject.activeSelf)
                     text.gameObject.SetActive(true);
 
-                // Same numbers vanilla's UpdateFood prints, including the pulse under a minute.
+                // Same numbers vanilla's UpdateFood prints.
                 float seconds = match.m_time / Game.m_foodRate;
                 string label = seconds >= 60f
                     ? Mathf.CeilToInt(seconds / 60f) + "m"
                     : Mathf.FloorToInt(seconds) + "s";
                 if (text.text != label)
                     text.text = label;
-                text.color = seconds >= 60f
-                    ? Color.white
-                    : new Color(1f, 1f, 1f, 0.4f + Mathf.Sin(Time.time * 10f) * 0.6f);
+
+                // Red, blinking, for the last tenth of THIS food's own duration. A raspberry and
+                // a serpent stew run for very different times, so a fixed "under a minute" warns
+                // far too late on one and far too early on the other.
+                // seconds is already m_time converted by the food rate, so the comparison is in
+                // real seconds and matches the number being displayed.
+                bool nearlyGone = seconds <= LowFoodSeconds;
+                text.color = nearlyGone
+                    ? Color.Lerp(LowFoodDim, LowFoodBright, Mathf.PingPong(Time.time * BlinkSpeed, 1f))
+                    : Color.white;
             }
         }
 

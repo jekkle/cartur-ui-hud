@@ -10,6 +10,10 @@ namespace CarturUIHud
     // boxes and the guardian power box, re-skinned onto the objects vanilla Hud already builds.
     // See HudSkin for why almost none of this needs code.
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
+    // Both replace the same bars, loading screen and panels; running either beside this is a
+    // fight over the same objects every frame, so BepInEx refuses to load us next to them.
+    [BepInIncompatibility("randyknapp.mods.auga")]
+    [BepInIncompatibility("ZenDragon.AugaLite")]
     public class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
@@ -22,6 +26,10 @@ namespace CarturUIHud
             {
                 HudSkin.Log = Logger;
                 HudLayout.Log = Logger;
+                Skin.Log = Logger;
+                InventoryScreen.Log = Logger;
+                Hotbar.Log = Logger;
+                Dump.Log = Logger;
 
                 if (!AssetLoader.LoadTextures(Logger))
                 {
@@ -36,11 +44,21 @@ namespace CarturUIHud
                     + "Turn off when done - the layout is saved either way.");
                 HudLayout.Init(Config, editMode);
 
+                // One launch with this on writes the vanilla UI hierarchy, sprite names and
+                // canvas scalers to the log, then turns itself off. It is how the skin table
+                // gets its names: from the game, not from memory.
+                Dump.Enabled = Config.Bind(
+                    "Debug", "dumpOnce", false,
+                    "Write the vanilla UI hierarchy to the BepInEx log on the next launch, then switch off.");
+
                 // A mod that throws during load takes the whole chainloader with it.
                 var harmony = new Harmony(PluginGuid);
                 harmony.PatchAll(typeof(HudSkin));
                 harmony.PatchAll(typeof(VanillaBars));
                 harmony.PatchAll(typeof(EditInputBlock));
+                harmony.PatchAll(typeof(Hotbar));
+                harmony.PatchAll(typeof(InventoryScreen));
+                harmony.PatchAll(typeof(Dump));
             }
             catch (Exception e)
             {

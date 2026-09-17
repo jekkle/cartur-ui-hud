@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using HarmonyLib;
@@ -59,6 +60,39 @@ namespace CarturUIHud
 
         private static Texture2D s_barFrame, s_barFill, s_foodFrame;
 
+        // The menu pieces, built by tools/art/assemble.py out of the two sprites above. Each is
+        // authored at 2 px per canvas unit with the 9-slice border listed here in source px;
+        // Skin creates them at 2 x the canvas ppu so they draw at their authored unit size.
+        // A sprite is cached per canvas ppu, because the loading screen is a separate root
+        // canvas from IngameGui and the two need not agree.
+        private static readonly (string name, float border)[] s_pieces =
+        {
+            ("panel", 24), ("panel_selected", 24), ("well", 16), ("slot", 16), ("slot_selected", 16),
+            ("button", 20), ("button_hover", 20), ("button_pressed", 20), ("button_disabled", 20),
+            ("tab", 20), ("tab_hover", 20), ("tab_selected", 20),
+            ("field", 16), ("field_hover", 16), ("field_disabled", 16), ("tooltip", 20),
+        };
+        private const float PieceAuthoredPxPerUnit = 2f;
+        private static readonly Dictionary<string, Texture2D> s_pieceTex = new Dictionary<string, Texture2D>();
+        private static readonly Dictionary<string, float> s_pieceBorder = new Dictionary<string, float>();
+        private static readonly Dictionary<string, Sprite> s_pieceSprites = new Dictionary<string, Sprite>();
+
+        /// <summary>A menu piece as a sliced sprite for the given canvas ppu, or null if the PNG is missing.</summary>
+        public static Sprite Piece(string name, float referencePixelsPerUnit)
+        {
+            string key = name + "@" + referencePixelsPerUnit;
+            if (s_pieceSprites.TryGetValue(key, out Sprite cached))
+                return cached;
+            if (!s_pieceTex.TryGetValue(name, out Texture2D tex) || tex == null)
+                return null;
+
+            float b = s_pieceBorder[name];
+            Sprite sprite = Make(tex, new Vector4(b, b, b, b), referencePixelsPerUnit * PieceAuthoredPxPerUnit);
+            sprite.name = "cartur_" + name;
+            s_pieceSprites[key] = sprite;
+            return sprite;
+        }
+
         public static Sprite BarFrame { get; private set; }
         public static Sprite BarFill { get; private set; }
         /// <summary>
@@ -76,6 +110,14 @@ namespace CarturUIHud
             s_barFrame = Load("bar_frame.png", log);
             s_barFill = Load("bar_fill.png", log);
             s_foodFrame = Load("food_frame.png", log);
+
+            // Menu pieces are optional: a missing one leaves that vanilla sprite alone, which
+            // Skin logs, rather than taking the HUD down with it.
+            foreach ((string name, float border) in s_pieces)
+            {
+                s_pieceTex[name] = Load(name + ".png", log);
+                s_pieceBorder[name] = border;
+            }
 
             return s_barFrame != null && s_barFill != null && s_foodFrame != null;
         }

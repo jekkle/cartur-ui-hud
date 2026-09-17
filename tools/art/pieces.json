@@ -1,0 +1,101 @@
+{
+  "_comment": "One entry per art piece, built by assemble.py from bar_frame.png + food_frame.png. size = shipped px (2 px per game unit). border = 9-slice border in px, must cover the rail (11 px) plus its mitre. variant_of = same geometry as that piece, different state.",
+  "defaults": {},
+  "pieces": {
+    "panel": {
+      "size": [
+        512,
+        512
+      ],
+      "border": 24,
+      "desc": "window panel"
+    },
+    "well": {
+      "size": [
+        256,
+        256
+      ],
+      "border": 16,
+      "tile": true,
+      "desc": "recessed inner panel"
+    },
+    "slot": {
+      "size": [
+        128,
+        128
+      ],
+      "border": 16,
+      "desc": "item slot"
+    },
+    "slot_selected": {
+      "variant_of": "slot",
+      "border": 16,
+      "hollow": true
+    },
+    "button": {
+      "size": [
+        384,
+        128
+      ],
+      "border": 20,
+      "desc": "button"
+    },
+    "button_hover": {
+      "variant_of": "button",
+      "border": 20
+    },
+    "button_pressed": {
+      "variant_of": "button",
+      "border": 20
+    },
+    "button_disabled": {
+      "variant_of": "button",
+      "border": 20
+    },
+    "tab": {
+      "size": [
+        256,
+        96
+      ],
+      "border": 20,
+      "desc": "tab"
+    },
+    "tab_hover": {
+      "variant_of": "tab",
+      "border": 20
+    },
+    "tab_selected": {
+      "variant_of": "tab",
+      "border": 20
+    },
+    "field": {
+      "size": [
+        384,
+        96
+      ],
+      "border": 16,
+      "desc": "text field"
+    },
+    "field_hover": {
+      "variant_of": "field",
+      "border": 16
+    },
+    "field_disabled": {
+      "variant_of": "field",
+      "border": 16
+    },
+    "tooltip": {
+      "size": [
+        256,
+        256
+      ],
+      "border": 20,
+      "desc": "tooltip"
+    },
+    "panel_selected": {
+      "variant_of": "panel",
+      "border": 24,
+      "hollow": true
+    }
+  }
+}

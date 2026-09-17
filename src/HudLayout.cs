@@ -20,9 +20,9 @@ namespace CarturUIHud
     /// immediately - which is also why the existing UiDrag from the build-menu mod could not
     /// be reused here.
     ///
-    /// Three of the panels are wrapped in containers (see HudSkin.Wrap) because the game also
-    /// rewrites their anchoredPosition every frame. For those the container is what moves while
-    /// the panel itself is what the mouse is tested against, since the container has no size.
+    /// Move and Hit are separate: a bar's panel is only the window between the ornaments, so
+    /// the outline and the mouse test go against the frame instead. Elements carry an owner
+    /// (the screen that registered them) so each screen's Awake clears only its own.
     /// </summary>
     internal static class HudLayout
     {
@@ -32,6 +32,7 @@ namespace CarturUIHud
 
         private class Element
         {
+            public string Owner;   // which screen registered it, so that screen's Awake can clear only its own
             public string Key;
             public string Label;
             public RectTransform Move;   // what gets positioned and scaled
@@ -47,6 +48,11 @@ namespace CarturUIHud
             public Action<float, Vector2> OnFrame;
             public float FrameScale = 1f;
             public Vector2 FrameOffset;
+            // What the mod would place this at with no config: what a reset goes back to.
+            public Vector2 HomePosition;
+            public float HomeScale = 1f;
+            public float HomeLength = 1f;
+            public float HomeFrameScale = 1f;
         }
 
         private static readonly List<Element> s_elements = new List<Element>();
@@ -70,10 +76,18 @@ namespace CarturUIHud
 
         public static bool Editing => s_editing;
 
+        private static ConfigEntry<bool> s_reset;
+
         public static void Init(ConfigFile config, ConfigEntry<bool> editMode)
         {
             s_config = config;
             s_editMode = editMode;
+
+            // A tick box rather than a keybind: it sits next to edit mode in the config editor,
+            // it cannot be hit by accident, and it unticks itself once the layout is back.
+            s_reset = config.Bind("Layout", "resetLayout", false,
+                "Tick to put every HUD and inventory piece back where the mod would place it. "
+                + "Unticks itself when done.");
 
             // Off, or every frame of a drag writes the whole file to disk.
             s_config.SaveOnConfigSet = false;
@@ -128,16 +142,26 @@ namespace CarturUIHud
             Log.LogInfo("config reloaded from disk");
         }
 
-        /// <summary>Called once per Hud.Awake, before anything registers.</summary>
-        public static void Reset(TMP_FontAsset font)
+        /// <summary>
+        /// Called from a screen's Awake before it registers. Only that screen's elements go:
+        /// Hud and InventoryGui wake in no fixed order relative to each other, and the one
+        /// waking second must not wipe what the first just registered.
+        /// </summary>
+        public static void Reset(string owner, TMP_FontAsset font)
         {
-            foreach (Element e in s_elements)
+            for (int i = s_elements.Count - 1; i >= 0; i--)
+            {
+                Element e = s_elements[i];
+                if (e.Owner != owner)
+                    continue;
                 if (e.Overlay != null)
                     UnityEngine.Object.Destroy(e.Overlay);
-            s_elements.Clear();
+                s_elements.RemoveAt(i);
+            }
             s_editing = false;
             s_grabbed = null;
-            s_font = font;
+            if (font != null)
+                s_font = font;
 
             if (s_white != null)
                 return;
@@ -147,13 +171,14 @@ namespace CarturUIHud
             s_white = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
         }
 
-        public static void Register(string key, string label, RectTransform move, RectTransform hit, Vector2 fallbackPosition, float fallbackScale = 1f, Action<float> onScale = null, Action<float> onLength = null, Action<float, Vector2> onFrame = null, float fallbackFrameScale = 1f, float fallbackLength = 1f)
+        public static void Register(string owner, string key, string label, RectTransform move, RectTransform hit, Vector2 fallbackPosition, float fallbackScale = 1f, Action<float> onScale = null, Action<float> onLength = null, Action<float, Vector2> onFrame = null, float fallbackFrameScale = 1f, float fallbackLength = 1f)
         {
             if (move == null || hit == null)
                 return;
 
             var element = new Element
             {
+                Owner = owner,
                 Key = key,
                 Label = label,
                 Move = move,
@@ -161,6 +186,10 @@ namespace CarturUIHud
                 OnScale = onScale,
                 OnLength = onLength,
                 OnFrame = onFrame,
+                HomePosition = fallbackPosition,
+                HomeScale = fallbackScale,
+                HomeLength = fallbackLength,
+                HomeFrameScale = fallbackFrameScale,
                 Entry = s_config.Bind("Layout", key, Format(fallbackPosition, fallbackScale, fallbackLength, fallbackFrameScale, Vector2.zero),
                     "Layout of the " + label + ". Written by edit mode; x,y,size,length,frameSize,frameX,frameY.")
             };
@@ -197,6 +226,9 @@ namespace CarturUIHud
                     ReloadFromConfig();
                 }
             }
+
+            if (s_reset != null && s_reset.Value)
+                ResetToDefaults();
 
             // Driven from the config rather than a key, so it lives with the rest of the
             // settings and cannot be hit by accident mid-fight.
@@ -252,6 +284,25 @@ namespace CarturUIHud
                     Persist();
                 }
             }
+        }
+
+        /// <summary>Every piece back to the position the mod would give it with no config at all.</summary>
+        private static void ResetToDefaults()
+        {
+            foreach (Element e in s_elements)
+            {
+                e.Move.anchoredPosition = e.HomePosition;
+                e.Scale = e.HomeScale;
+                e.Length = e.HomeLength;
+                e.FrameScale = e.HomeFrameScale;
+                e.FrameOffset = Vector2.zero;
+                Apply(e);
+                Save(e);
+            }
+
+            s_reset.Value = false;
+            Persist();
+            Log.LogInfo("layout reset - " + s_elements.Count + " pieces back to their defaults");
         }
 
         private static void Toggle()
@@ -334,6 +385,29 @@ namespace CarturUIHud
             return canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
         }
 
+        private const float BorderWidth = 3f;
+        private static readonly Color EditBorder = new Color(0.85f, 0.12f, 0.12f, 0.95f);
+
+        /// <summary>One side of the edit outline, stretched along the edge it belongs to.</summary>
+        private static void Edge(RectTransform parent, Vector2 min, Vector2 max, Vector2 thickness)
+        {
+            var go = new GameObject("Edge", typeof(RectTransform));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(parent, false);
+            rt.anchorMin = min;
+            rt.anchorMax = max;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            // One axis is pinned by the anchors; the other is given the strip's thickness.
+            rt.sizeDelta = new Vector2(Mathf.Abs(thickness.x), Mathf.Abs(thickness.y));
+            rt.pivot = new Vector2(thickness.x < 0f ? 1f : 0f, thickness.y < 0f ? 1f : 0f);
+
+            Image img = go.AddComponent<Image>();
+            img.sprite = s_white;
+            img.color = EditBorder;
+            img.raycastTarget = false;
+        }
+
         private static void EnsureOverlay(Element e)
         {
             if (e.Overlay != null)
@@ -347,15 +421,22 @@ namespace CarturUIHud
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
 
-            Image tint = e.Overlay.AddComponent<Image>();
-            tint.sprite = s_white;
-            tint.color = new Color(0.95f, 0.75f, 0.15f, 0.10f);
-            tint.raycastTarget = false;
+            // Invisible, but still a raycast target: the overlay has to eat the click, because
+            // under an inventory panel are item slots and a drag that reached them would pick
+            // something up. Alpha zero rather than a tint - a wash over the piece hides the very
+            // thing being positioned.
+            Image blocker = e.Overlay.AddComponent<Image>();
+            blocker.sprite = s_white;
+            blocker.color = new Color(1f, 1f, 1f, 0f);
+            blocker.raycastTarget = true;
 
-            Outline outline = e.Overlay.AddComponent<Outline>();
-            outline.effectColor = new Color(1f, 0.92f, 0.25f, 0.85f);
-            outline.effectDistance = new Vector2(2f, -2f);
-            outline.useGraphicAlpha = false;
+            // A border of four thin strips rather than a UI Outline: Outline works by drawing
+            // offset copies of the graphic, so on a filled rect it gives a bigger filled rect,
+            // not an edge. Strips give a true hollow box that leaves the piece visible.
+            Edge(rt, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -BorderWidth));   // top
+            Edge(rt, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, BorderWidth));    // bottom
+            Edge(rt, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(BorderWidth, 0f));    // left
+            Edge(rt, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(-BorderWidth, 0f));   // right
 
             if (s_font == null)
                 return;
