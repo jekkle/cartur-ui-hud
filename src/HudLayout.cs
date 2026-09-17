@@ -147,7 +147,7 @@ namespace CarturUIHud
             s_white = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
         }
 
-        public static void Register(string key, string label, RectTransform move, RectTransform hit, Vector2 fallbackPosition, float fallbackScale = 1f, Action<float> onScale = null, Action<float> onLength = null, Action<float, Vector2> onFrame = null, float fallbackFrameScale = 1f, float fallbackLength = 1f)
+        public static void Register(string key, string label, RectTransform move, RectTransform hit, Vector2 fallbackPosition, float fallbackScale = 1f, Action<float> onScale = null, Action<float> onLength = null, Action<float, Vector2> onFrame = null, float fallbackFrameScale = 1f, float fallbackLength = 1f, Vector2? supersededPosition = null)
         {
             if (move == null || hit == null)
                 return;
@@ -173,6 +173,18 @@ namespace CarturUIHud
                 frameScale = fallbackFrameScale;
                 frameOff = Vector2.zero;
                 Log.LogWarning("could not read layout for " + key + " (\"" + element.Entry.Value + "\") - using the default");
+            }
+
+            // A position a previous version wrote as its default, which this version no longer
+            // places anything at. Compared on position alone, so it survives the entry gaining
+            // fields, and it leaves the size and length the player chose alone.
+            if (supersededPosition.HasValue
+                && Mathf.Approximately(position.x, supersededPosition.Value.x)
+                && Mathf.Approximately(position.y, supersededPosition.Value.y))
+            {
+                position = fallbackPosition;
+                element.Entry.Value = Format(position, scale, length, frameScale, frameOff);
+                Log.LogInfo("moved " + key + " off the position an older version defaulted it to");
             }
 
             element.Scale = Mathf.Clamp(scale, MinScale, MaxScale);

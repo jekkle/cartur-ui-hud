@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.3
+
+- The eitr bar now shows. It shared a row with adrenaline, and adrenaline won that row
+  whenever you had any adrenaline pool at all - which every vanilla trinket grants, bronze
+  upwards. So anyone wearing a trinket never saw their mana, however much of it they had.
+- Eitr and adrenaline get a row each now, and each one appears on its own pool without
+  consulting the other, the way the game's own HUD does it.
+- A config written by an earlier version has both bars saved at the same spot. It is
+  moved to the new rows on load; any size or length you set by hand is kept.
+
 ## 1.0.2
 
 - Listing only. New icon: a shot of the HUD in game, so the Thunderstore tile and the

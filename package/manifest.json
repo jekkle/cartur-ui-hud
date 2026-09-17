@@ -1,6 +1,6 @@
 {
   "name": "Carturs_UI_HUD",
-  "version_number": "1.0.2",
+  "version_number": "1.0.3",
   "website_url": "https://github.com/jekkle/cartur-ui-hud",
   "description": "A hand-drawn bronze HUD. Health, stamina, eitr and adrenaline bars in Norse knotwork frames, three food diamonds and the guardian power box. Arrange and scale every piece in game, then it stays put.",
   "dependencies": [

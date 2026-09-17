@@ -32,15 +32,21 @@ namespace CarturUIHud
         // still being placed - they only appear once the player has a pool at all.
         private static readonly Vector2 HealthHome = new Vector2(307.5f, 309.25f);
         private static readonly Vector2 StaminaHome = new Vector2(330.75f, 272.75f);
-        // Eitr and adrenaline share the third row, one 36.5 step below stamina. A melee
-        // character has adrenaline and no eitr, a mage the reverse, and the rare build with
-        // both is running eitr food it would not normally eat - so adrenaline takes the slot
-        // when it is there and eitr falls back to it otherwise. Same x as stamina, so the two
-        // thin bars line up exactly.
-        // Third row sits on stamina's x, so the two thin bars share a left edge and the same
-        // geometry - which is why they end up sharing a length figure too.
-        private static readonly Vector2 EitrHome = new Vector2(330.75f, 219.75f);
-        private static readonly Vector2 AdrenalineHome = new Vector2(330.75f, 219.75f);
+        // Eitr and adrenaline get a row each, 36.5 below stamina and 36.5 below that. They
+        // shared one slot until 1.0.3, on the reasoning that a melee character has adrenaline
+        // and a mage has eitr, so only one would ever be up. That was wrong: max adrenaline
+        // comes from the trinket slot (ItemData.SharedData.m_maxAdrenaline, which every one of
+        // the fifteen vanilla trinkets sets, bronze upwards), not from a melee build. Any
+        // player wearing any trinket had a non-zero adrenaline pool permanently, and the shared
+        // slot gave it to adrenaline - so the eitr bar never drew for them, mana or not.
+        // Same x as stamina, so all three thin bars share a left edge and the same geometry -
+        // which is why they share a length figure too.
+        private static readonly Vector2 EitrHome = new Vector2(330.75f, 236.25f);
+        private static readonly Vector2 AdrenalineHome = new Vector2(330.75f, 199.75f);
+
+        // Where 1.0.2 parked both of them. A config still holding this for either bar was
+        // written by the shared-slot build, not placed by hand, so it is moved to the new row.
+        private static readonly Vector2 SharedRowLegacy = new Vector2(330.75f, 219.75f);
 
         // Health's frame reads better a shade tighter than the others.
         private const float HealthFrame = 0.85f;
@@ -133,12 +139,12 @@ namespace CarturUIHud
             Build(2, EitrFull, "eitr", "Eitr", StatHeight, 1f, RowThreeLength, EitrHome, hudroot,
                 __instance.m_eitrBarRoot, __instance.m_eitrBarRoot?.Find("Stamina") as RectTransform,
                 __instance.m_eitrBarFast, __instance.m_eitrBarSlow,
-                __instance.m_eitrText, __instance.m_eitrAnimator);
+                __instance.m_eitrText, __instance.m_eitrAnimator, SharedRowLegacy);
 
             Build(3, AdrenalineFull, "adrenaline", "Adrenaline", StatHeight, 1f, RowThreeLength, AdrenalineHome, hudroot,
                 __instance.m_adrenalineBarRoot, __instance.m_adrenalineBarRoot?.Find("Stamina") as RectTransform,
                 __instance.m_adrenalineBarFast, __instance.m_adrenalineBarSlow,
-                __instance.m_adrenalineText, __instance.m_adrenalineAnimator);
+                __instance.m_adrenalineText, __instance.m_adrenalineAnimator, SharedRowLegacy);
 
             Hide(__instance.m_healthPanel?.Find("healthicon"));
             Hide(__instance.m_healthPanel?.Find("foodicon"));
@@ -157,7 +163,7 @@ namespace CarturUIHud
 
         private static void Build(int index, float fullStat, string key, string label, float height, float frameScale, float length, Vector2 position,
             Transform hudroot, RectTransform panel, RectTransform inner,
-            GuiBar fast, GuiBar slow, TMP_Text text, Animator animator)
+            GuiBar fast, GuiBar slow, TMP_Text text, Animator animator, Vector2? supersededPosition = null)
         {
             if (panel == null)
             {
@@ -225,7 +231,7 @@ namespace CarturUIHud
             // the point and did not match what you see.
             RectTransform outline = bar.Frame != null ? (RectTransform)bar.Frame.transform : panel;
             HudLayout.Register(key, label, panel, outline, position, height,
-                bar.ApplyHeight, bar.ApplyLength, bar.ApplyFrame, frameScale, length);
+                bar.ApplyHeight, bar.ApplyLength, bar.ApplyFrame, frameScale, length, supersededPosition);
         }
 
         /// <summary>
@@ -512,9 +518,11 @@ namespace CarturUIHud
             // Eitr and adrenaline are hidden outright without a pool, rather than vanilla's
             // fade, which would leave an empty frame on screen now the frame is visible. Both
             // are forced on in edit mode so they can be placed.
-            // Both sit in the third row, so only one of them draws. Adrenaline wins it: with
-            // both pools up you are a melee character who happens to have eaten eitr food, and
-            // adrenaline is the one changing several times a second.
+            //
+            // Each answers to its own pool and neither knows about the other, which is how the
+            // game does it (Hud.UpdateEitr and Hud.UpdateAdrenaline never consult each other).
+            // They used to share one slot with adrenaline winning; a trinket gives a permanent
+            // adrenaline pool, so that hid the eitr bar for anyone wearing one.
             float maxEitr = player.GetMaxEitr();
             float maxAdrenaline = player.GetMaxAdrenaline();
 
@@ -522,7 +530,7 @@ namespace CarturUIHud
             if (maxAdrenaline > 0f)
                 Bars[3].Drive(player.GetAdrenaline(), maxAdrenaline);
 
-            Bars[2].Show((maxEitr > 0f && maxAdrenaline <= 0f) || edit);
+            Bars[2].Show(maxEitr > 0f || edit);
             if (maxEitr > 0f)
                 Bars[2].Drive(player.GetEitr(), maxEitr);
 

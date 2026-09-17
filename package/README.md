@@ -26,8 +26,8 @@ Client-side. No server install needed, works in multiplayer.
   installed they show your quick slot items instead, and a slot holding something you are
   currently digesting still shows that food's timer.
 - **The guardian power** in its own frame, with the name and Ready/cooldown over the icon.
-- **Eitr and adrenaline share a row** — whichever pool you actually have is the one drawn.
-  Neither appears at all until you have one.
+- **Eitr and adrenaline get a row each** — neither is drawn until you have that pool,
+  and neither hides the other.
 
 Bars grow with your maximum, not just your current value: eat, and the bar itself gets
 longer; let the food run out and it shrinks back. Each bar reaches the same length at its
