@@ -30,6 +30,7 @@ namespace CarturUIHud
                 InventoryScreen.Log = Logger;
                 Hotbar.Log = Logger;
                 Dump.Log = Logger;
+                LoadingScreen.Log = Logger;
 
                 if (!AssetLoader.LoadTextures(Logger))
                 {
@@ -58,6 +59,7 @@ namespace CarturUIHud
                 harmony.PatchAll(typeof(EditInputBlock));
                 harmony.PatchAll(typeof(Hotbar));
                 harmony.PatchAll(typeof(InventoryScreen));
+                harmony.PatchAll(typeof(LoadingScreen));
                 harmony.PatchAll(typeof(Dump));
             }
             catch (Exception e)
