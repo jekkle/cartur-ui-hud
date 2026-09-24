@@ -4,12 +4,29 @@
     <TargetFramework>net472</TargetFramework>
     <AssemblyName>CarturUIHud</AssemblyName>
     <RootNamespace>CarturUIHud</RootNamespace>
-    <Version>1.0.2</Version>
+    <Version>1.0.4</Version>
     <LangVersion>latest</LangVersion>
     <RestoreAdditionalProjectSources>https://nuget.bepinex.dev/v3/index.json</RestoreAdditionalProjectSources>
     <VALHEIM_INSTALL Condition="'$(VALHEIM_INSTALL)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Valheim</VALHEIM_INSTALL>
     <R2MODMAN_PROFILE Condition="'$(R2MODMAN_PROFILE)' == ''">$(APPDATA)\r2modmanPlus-local\Valheim\profiles\Default</R2MODMAN_PROFILE>
   </PropertyGroup>
+
+  <!-- Dump, Probe and IconRender exist to answer "where did the game move this control" -
+       they walk the vanilla UI hierarchy, log what a click hit, and render item icons. That
+       is a development question, not something a player's install should carry, so a Release
+       build drops all three: no Debug config section, and no Harmony hooks on Hud.Update or
+       InventoryGui.Update, both of which run every frame.
+
+       Build Debug to get them back:  dotnet build -c Debug -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);DIAGNOSTICS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(Configuration)' != 'Debug'">
+    <Compile Remove="Dump.cs" />
+    <Compile Remove="Probe.cs" />
+    <Compile Remove="IconRender.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="BepInEx.Analyzers" Version="1.0.8" PrivateAssets="all" />
@@ -26,8 +43,25 @@
       <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\assembly_guiutils.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- Vector2i, which is how every inventory grid position is expressed. -->
+    <Reference Include="assembly_utils">
+      <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\assembly_utils.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine">
       <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule">
+      <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\UnityEngine.ParticleSystemModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
@@ -46,6 +80,10 @@
       <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\UnityEngine.AnimationModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.VideoModule">
+      <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\UnityEngine.VideoModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine.InputLegacyModule">
       <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>false</Private>
@@ -62,10 +100,16 @@
     </PropertyGroup>
     <ItemGroup>
       <KitFiles Include="$(MSBuildProjectDirectory)\Assets\*.png" />
+      <LoadingArt Include="$(MSBuildProjectDirectory)\Assets\loading\*.*" />
+      <SleepArt Include="$(MSBuildProjectDirectory)\Assets\sleep\*.*" />
+      <InlayArt Include="$(MSBuildProjectDirectory)\Assets\inlays\*.*" />
     </ItemGroup>
-    <MakeDir Directories="$(DeployDir);$(DeployDir)\assets" />
+    <MakeDir Directories="$(DeployDir);$(DeployDir)\assets;$(DeployDir)\assets\loading;$(DeployDir)\assets\sleep;$(DeployDir)\assets\inlays" />
     <Copy SourceFiles="$(TargetDir)$(AssemblyName).dll" DestinationFolder="$(DeployDir)" />
     <Copy SourceFiles="@(KitFiles)" DestinationFolder="$(DeployDir)\assets" />
+    <Copy SourceFiles="@(LoadingArt)" DestinationFolder="$(DeployDir)\assets\loading" />
+    <Copy SourceFiles="@(SleepArt)" DestinationFolder="$(DeployDir)\assets\sleep" />
+    <Copy SourceFiles="@(InlayArt)" DestinationFolder="$(DeployDir)\assets\inlays" />
   </Target>
 
 </Project>

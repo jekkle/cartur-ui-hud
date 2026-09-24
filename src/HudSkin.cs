@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
-using BepInEx.Bootstrap;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
@@ -32,15 +30,21 @@ namespace CarturUIHud
         // still being placed - they only appear once the player has a pool at all.
         private static readonly Vector2 HealthHome = new Vector2(307.5f, 309.25f);
         private static readonly Vector2 StaminaHome = new Vector2(330.75f, 272.75f);
-        // Eitr and adrenaline share the third row, one 36.5 step below stamina. A melee
-        // character has adrenaline and no eitr, a mage the reverse, and the rare build with
-        // both is running eitr food it would not normally eat - so adrenaline takes the slot
-        // when it is there and eitr falls back to it otherwise. Same x as stamina, so the two
-        // thin bars line up exactly.
-        // Third row sits on stamina's x, so the two thin bars share a left edge and the same
-        // geometry - which is why they end up sharing a length figure too.
-        private static readonly Vector2 EitrHome = new Vector2(330.75f, 219.75f);
-        private static readonly Vector2 AdrenalineHome = new Vector2(330.75f, 219.75f);
+        // Eitr and adrenaline get a row each, 36.5 below stamina and 36.5 below that. They
+        // shared one slot until 1.0.3, on the reasoning that a melee character has adrenaline
+        // and a mage has eitr, so only one would ever be up. That was wrong: max adrenaline
+        // comes from the trinket slot (ItemData.SharedData.m_maxAdrenaline, which every one of
+        // the fifteen vanilla trinkets sets, bronze upwards), not from a melee build. Any
+        // player wearing any trinket had a non-zero adrenaline pool permanently, and the shared
+        // slot gave it to adrenaline - so the eitr bar never drew for them, mana or not.
+        // Same x as stamina, so all three thin bars share a left edge and the same geometry -
+        // which is why they share a length figure too.
+        private static readonly Vector2 EitrHome = new Vector2(330.75f, 236.25f);
+        private static readonly Vector2 AdrenalineHome = new Vector2(330.75f, 199.75f);
+
+        // Where 1.0.2 parked both of them. A config still holding this for either bar was
+        // written by the shared-slot build, not placed by hand, so it is moved to the new row.
+        private static readonly Vector2 SharedRowLegacy = new Vector2(330.75f, 219.75f);
 
         // Health's frame reads better a shade tighter than the others.
         private const float HealthFrame = 0.85f;
@@ -88,8 +92,6 @@ namespace CarturUIHud
         // off the bevel without making the icon unreadable.
         private const float IconFraction = 0.55f;
 
-        internal const string EaqsGuid = "randyknapp.mods.equipmentandquickslots";
-
         // Food timers: the last minute blinks red, and a quick slot
         // holding food nobody has eaten yet says so instead of showing a blank box.
         //
@@ -100,6 +102,17 @@ namespace CarturUIHud
         private const float BlinkSpeed = 2.5f;
         private static readonly Color LowFoodDim = new Color(0.65f, 0.10f, 0.10f, 0.75f);
         private static readonly Color LowFoodBright = new Color(1f, 0.25f, 0.20f, 1f);
+        // Outline thickness on the key letter, in SDF units. Wide enough to separate 14pt
+        // glyphs from a busy icon, short of the width that fills in the counters of a B.
+        private const float KeyOutline = 0.15f;
+        /// <summary>The key letter's own line height.</summary>
+        private const float KeyHeight = 20f;
+
+        /// <summary>
+        /// How far it rides up from where vanilla's countdown sits. A full line height put it
+        /// off the wood; this keeps it on the frame with the icon clear underneath.
+        /// </summary>
+        private const float KeyRise = 14f;
         private const string EatLabel = "Eat";
         private static readonly Color EatColour = new Color(1f, 0.85f, 0.45f, 0.9f);
 
@@ -107,13 +120,49 @@ namespace CarturUIHud
         internal static readonly BarSkin[] Bars = { new BarSkin(), new BarSkin(), new BarSkin(), new BarSkin() };
 
         private static Image[] s_foodFrames;
+        private static readonly RectTransform[] s_foodBoxes = new RectTransform[3];
+
+        /// <summary>
+        /// The diamond a quick slot lives in. Since Part 12 the diamonds are not a picture of
+        /// the quick slots, they are the quick slots: QuickSlots.Host lays the real inventory
+        /// cell over one of these as an invisible hit area, so the diamond can be dropped onto,
+        /// dragged out of, right-clicked and hovered for a tooltip.
+        ///
+        /// The drawing is untouched. Everything on the diamond - the frame, the item icon, the
+        /// key letter, the countdown - is still Part 1's, exactly as it was.
+        /// </summary>
+        internal static RectTransform QuickBox(int index) =>
+            index >= 0 && index < s_foodBoxes.Length ? s_foodBoxes[index] : null;
+
+        /// <summary>
+        /// Lights the diamond a controller is sitting on. The cell's own selection marker is a
+        /// square, which is wrong over a diamond, so the frame Cartur drew is the highlight
+        /// instead - same sprite, same place, same size, just brighter. Nothing moves.
+        /// </summary>
+        internal static void SetQuickSelection(int index)
+        {
+            if (s_foodFrames == null)
+                return;
+            for (int i = 0; i < s_foodFrames.Length; i++)
+            {
+                Image frame = s_foodFrames[i];
+                if (frame == null)
+                    continue;
+                Color want = i == index ? QuickSelected : Color.white;
+                if (frame.color != want)
+                    frame.color = want;
+            }
+        }
+
+        // Vanilla's own armour-number gold, lifted towards white so it reads as "lit" rather
+        // than "tinted yellow".
+        private static readonly Color QuickSelected = new Color(1f, 0.95f, 0.72f, 1f);
         private static TMP_Text[] s_foodTimes = new TMP_Text[3];
         private static readonly ItemDrop.ItemData[] s_slotItems = new ItemDrop.ItemData[3];
-        private static bool s_quickSlotMode;
+        // The diamonds have shown quick slot contents since Part 1. They used to be fed by
+        // Equipment and Quick Slots through reflection; the slots are this mod's own now
+        // (Part 12), so the reflection and the "is that mod installed" branch are both gone.
         private static bool s_started;
-        private static MethodInfo s_getQuickSlotItems;
-        private static MethodInfo s_getQuickSlots;      // Slots.GetQuickSlots() -> Slot[]
-        private static MethodInfo s_getShortcutText;    // Slot.GetShortcutText() -> string
         private static readonly TMP_Text[] s_foodKeys = new TMP_Text[3];
 
         internal static BepInEx.Logging.ManualLogSource Log;
@@ -149,12 +198,12 @@ namespace CarturUIHud
             Build(2, EitrFull, "eitr", "Eitr", StatHeight, 1f, RowThreeLength, EitrHome, hudroot,
                 __instance.m_eitrBarRoot, __instance.m_eitrBarRoot?.Find("Stamina") as RectTransform,
                 __instance.m_eitrBarFast, __instance.m_eitrBarSlow,
-                __instance.m_eitrText, __instance.m_eitrAnimator);
+                __instance.m_eitrText, __instance.m_eitrAnimator, SharedRowLegacy);
 
             Build(3, AdrenalineFull, "adrenaline", "Adrenaline", StatHeight, 1f, RowThreeLength, AdrenalineHome, hudroot,
                 __instance.m_adrenalineBarRoot, __instance.m_adrenalineBarRoot?.Find("Stamina") as RectTransform,
                 __instance.m_adrenalineBarFast, __instance.m_adrenalineBarSlow,
-                __instance.m_adrenalineText, __instance.m_adrenalineAnimator);
+                __instance.m_adrenalineText, __instance.m_adrenalineAnimator, SharedRowLegacy);
 
             Hide(__instance.m_healthPanel?.Find("healthicon"));
             Hide(__instance.m_healthPanel?.Find("foodicon"));
@@ -166,14 +215,14 @@ namespace CarturUIHud
             HudLayout.Register("hud", "cluster", "Food + power", cluster, cluster, ClusterHome, ClusterScale);
 
             Log.LogInfo("driving 4 bars, skinned 3 food boxes and the guardian power box"
-                + (s_quickSlotMode ? ", food from Equipment and Quick Slots" : ", food from vanilla"));
+                + ", food boxes showing the quick slots");
         }
 
         // --- bars ---
 
         private static void Build(int index, float fullStat, string key, string label, float height, float frameScale, float length, Vector2 position,
             Transform hudroot, RectTransform panel, RectTransform inner,
-            GuiBar fast, GuiBar slow, TMP_Text text, Animator animator)
+            GuiBar fast, GuiBar slow, TMP_Text text, Animator animator, Vector2? supersededPosition = null)
         {
             if (panel == null)
             {
@@ -241,7 +290,7 @@ namespace CarturUIHud
             // the point and did not match what you see.
             RectTransform outline = bar.Frame != null ? (RectTransform)bar.Frame.transform : panel;
             HudLayout.Register("hud", key, label, panel, outline, position, height,
-                bar.ApplyHeight, bar.ApplyLength, bar.ApplyFrame, frameScale, length);
+                bar.ApplyHeight, bar.ApplyLength, bar.ApplyFrame, frameScale, length, supersededPosition);
         }
 
         /// <summary>
@@ -303,7 +352,6 @@ namespace CarturUIHud
 
         private static void SkinFood(Hud hud, RectTransform cluster)
         {
-            s_quickSlotMode = Chainloader.PluginInfos.ContainsKey(EaqsGuid) && ResolveEaqs();
             s_foodFrames = new Image[3];
             s_foodTimes = new TMP_Text[3];
             Vector2[] defaults = { Food0, Food1, Food2 };
@@ -327,6 +375,7 @@ namespace CarturUIHud
 
                 var rt = (RectTransform)box;
                 Seat(rt, cluster, defaults[i], FoodSize, FoodScales[i]);
+                s_foodBoxes[i] = rt;
 
                 Image icon = hud.m_foodIcons.Length > i ? hud.m_foodIcons[i] : null;
                 if (icon != null)
@@ -335,11 +384,14 @@ namespace CarturUIHud
                     ((RectTransform)icon.transform).sizeDelta = new Vector2(-margin, -margin);
                 }
 
-                s_foodKeys[i] = KeyLabel(rt, i);
-
+                // The countdown is taken first because KeyLabel reads its font: built the other
+                // way round, every key letter came out with a null font on the first Awake.
+                //
                 // Vanilla hangs the countdown off the box's bottom-right corner, which on a
                 // diamond is empty space outside the frame. Centre it along the lower edge.
                 s_foodTimes[i] = hud.m_foodTime.Length > i ? hud.m_foodTime[i] : null;
+
+                s_foodKeys[i] = KeyLabel(rt, i);
                 if (s_foodTimes[i] != null)
                 {
                     var trt = (RectTransform)s_foodTimes[i].transform;
@@ -348,9 +400,6 @@ namespace CarturUIHud
                     trt.anchoredPosition = new Vector2(0f, FoodSize * 0.2f);
                 }
             }
-
-            if (!s_quickSlotMode)
-                return;
 
             // Blanking these makes vanilla UpdateFood a no-op loop so it stops writing the food
             // icons every frame. The boxes are ours from here.
@@ -371,14 +420,33 @@ namespace CarturUIHud
             rt.SetParent(box, false);
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
-            rt.sizeDelta = new Vector2(FoodSize, 20f);
-            rt.anchoredPosition = new Vector2(0f, -FoodSize * 0.2f);
+            rt.sizeDelta = new Vector2(FoodSize, KeyHeight);
+            // Up onto the wood, clear of the food. It sat a fifth of the diamond down, which is
+            // where the item icon starts - the icon is 0.55 of the frame, so its top edge is
+            // 18.5 units down on an 82 unit diamond and the letter was lying across it. Lifting
+            // it by its own height puts it on the frame's upper bevel instead.
+            rt.anchoredPosition = new Vector2(0f, -FoodSize * 0.2f + KeyRise);
 
             var text = go.AddComponent<TextMeshProUGUI>();
             text.font = s_foodTimes[index] != null ? s_foodTimes[index].font : null;
             text.fontSize = 14f;
             text.alignment = TextAlignmentOptions.Center;
-            text.color = new Color(0.60f, 0.82f, 1f, 0.95f);   // vanilla's own key-hint blue
+            // White with a thin black outline. The letter sits over the item icon, and icons
+            // run from near-black berries to bright cooked meat, so no solid colour reads
+            // against all of them - the outline is what makes it legible, the colour only
+            // decides which half of the range it prefers.
+            //
+            // The outline goes on text.fontMaterial, which hands back a per-label instance.
+            // Writing it to text.font.material instead would outline every piece of text in
+            // the game drawn with this font.
+            text.color = Color.white;
+            // Bold: at 14pt over a busy icon the plain weight read faint, and thickening the
+            // glyph does more for it than brightening a colour that is already white.
+            text.fontStyle = FontStyles.Bold;
+            Material material = text.fontMaterial;
+            material.EnableKeyword(ShaderUtilities.Keyword_Outline);
+            material.SetColor(ShaderUtilities.ID_OutlineColor, Color.black);
+            material.SetFloat(ShaderUtilities.ID_OutlineWidth, KeyOutline);
             text.raycastTarget = false;
             text.text = string.Empty;
             return text;
@@ -387,157 +455,191 @@ namespace CarturUIHud
         /// <summary>Refreshes the key letters. Called with the icons, not per frame.</summary>
         private static void RefreshQuickSlotKeys()
         {
-            if (s_getQuickSlots == null || s_getShortcutText == null)
-                return;
-
-            if (!(s_getQuickSlots.Invoke(null, null) is System.Collections.IList slots))
-                return;
-
             for (int i = 0; i < s_foodKeys.Length; i++)
             {
                 TMP_Text label = s_foodKeys[i];
                 if (label == null)
                     continue;
-                string key = i < slots.Count && slots[i] != null
-                    ? s_getShortcutText.Invoke(slots[i], null) as string
-                    : null;
-                key = key ?? string.Empty;
+                string key = QuickSlots.KeyText(i);
                 if (label.text != key)
                     label.text = key;
             }
         }
 
-        private static bool ResolveEaqs()
+        internal static void RefreshQuickSlots()
         {
-            Type api = AccessTools.TypeByName("EquipmentAndQuickSlots.API");
-            s_getQuickSlotItems = api?.GetMethod("GetQuickSlotItems", BindingFlags.Public | BindingFlags.Static);
-            if (s_getQuickSlotItems == null)
-            {
-                Log.LogWarning("Equipment and Quick Slots is loaded but API.GetQuickSlotItems is gone - falling back to vanilla food");
-                return false;
-            }
-
-            // The key each quick slot answers to, for the label on its diamond. Both of these
-            // are public on EQAS; only the assembly reference is missing, hence reflection.
-            Type slots = AccessTools.TypeByName("EquipmentAndQuickSlots.Slots");
-            s_getQuickSlots = slots?.GetMethod("GetQuickSlots", BindingFlags.Public | BindingFlags.Static);
-            Type slot = AccessTools.TypeByName("EquipmentAndQuickSlots.Slots+Slot");
-            s_getShortcutText = slot?.GetMethod("GetShortcutText", BindingFlags.Public | BindingFlags.Instance);
-            if (s_getQuickSlots == null || s_getShortcutText == null)
-                Log.LogInfo("Equipment and Quick Slots hotkey text not available - diamonds go without a key label");
-
-            // EQAS raises this whenever a slot's item changes, so the boxes never need a
-            // per-frame refresh of their own.
-            MethodInfo add = api.GetMethod("AddSlotItemChangedListener", BindingFlags.Public | BindingFlags.Static);
-            if (add != null)
-            {
-                Action<string, ItemDrop.ItemData, ItemDrop.ItemData> listener = (slot, before, after) => RefreshQuickSlots();
-                add.Invoke(null, new object[] { listener });
-            }
-            else
-            {
-                Log.LogWarning("Equipment and Quick Slots API.AddSlotItemChangedListener is gone - quick slot icons will not refresh");
-            }
-
-            return true;
-        }
-
-        private static void RefreshQuickSlots()
-        {
-            if (s_getQuickSlotItems == null || s_foodFrames == null)
+            if (s_foodFrames == null)
                 return;
 
             RefreshQuickSlotKeys();
 
-            var items = s_getQuickSlotItems.Invoke(null, null) as IList<ItemDrop.ItemData>;
-
-            for (int i = 0; i < s_foodFrames.Length; i++)
-            {
-                // Cached so the per-frame countdown does not have to go through reflection.
-                s_slotItems[i] = items != null && i < items.Count ? items[i] : null;
-
-                Image frame = s_foodFrames[i];
-                if (frame == null || frame.transform.childCount == 0)
-                    continue;
-
-                Image icon = frame.transform.GetChild(0).GetComponent<Image>();
-                if (icon == null)
-                    continue;
-
-                ItemDrop.ItemData item = s_slotItems[i];
-                icon.gameObject.SetActive(item != null);
-                if (item != null)
-                {
-                    icon.sprite = item.GetIcon();
-                    icon.color = Color.white;
-                }
-            }
+            // Cached here so the per-frame pass does not walk the inventory three times a
+            // frame looking them up. What is actually drawn on a diamond is decided there,
+            // because it depends on what is being digested, and that changes without the
+            // inventory changing at all.
+            for (int i = 0; i < s_slotItems.Length; i++)
+                s_slotItems[i] = QuickSlots.Item(i);
         }
 
         /// <summary>
-        /// A quick slot holds an inventory item and has no countdown of its own - the timer
-        /// belongs to the separate list of foods the player has eaten. Each slot is matched
-        /// against that list by shared name, and when the slot holds something currently being
-        /// digested its remaining time is drawn on that diamond.
+        /// What each diamond shows, decided every frame, because it depends on two things that
+        /// move independently: what is in that quick slot, and what the player is digesting.
+        ///
+        /// One rule, Cartur's: THE ICON IS THE SLOT. A diamond draws the item that is in its
+        /// slot and nothing else, so a full diamond means "you have food loaded here" and an
+        /// empty one means "you have not" - which is the question the row is on screen to
+        /// answer. The food you are digesting is vanilla's own list; it is not what these are.
+        ///
+        ///   slot holds food                       -> its icon
+        ///   slot is empty                         -> no icon, whatever is still burning down
+        ///
+        /// The countdown is the one thing that outlives the item, because the food you just ate
+        /// out of that slot is still doing something for you:
+        ///
+        ///   slot holds food you are digesting     -> that buff's countdown
+        ///   you ate that slot's food, it is gone  -> empty frame, its countdown still running
+        ///   slot holds food you are not digesting -> "Eat"
+        ///   nothing in the slot, nothing burning  -> blank
+        ///
+        /// What went, and why: an earlier version dimmed the eaten food's icon back onto the
+        /// diamond, and handed any unclaimed buff - food eaten off the hotbar - down into the
+        /// blank diamonds, so all three boxes covered all three buffs like vanilla's. Both put
+        /// an icon on a diamond for food that was not in that slot, which is the thing this
+        /// rule exists to stop: it made a loaded slot and an empty one look the same.
+        ///
+        /// Nothing is allocated per frame: GetFoods hands back the player's own list, the slot
+        /// items are cached by RefreshQuickSlots, and the claim table is three ints.
         /// </summary>
+
+        // The food last eaten out of each quick slot, by shared name. Set in AteFrom below.
+        private static readonly string[] s_ate = new string[3];
+
+        // Which food each diamond is showing this frame, as an index into the player's list.
+        private static readonly int[] s_show = { -1, -1, -1 };
+
+        /// <summary>
+        /// Remembers which quick slot a food was eaten out of. Player.EatFood is the one place
+        /// the game records a food, and the item is still sitting at its inventory position
+        /// when it runs - so the slot is read off the item rather than guessed from whichever
+        /// hotkey was last pressed, and a food eaten by clicking the diamond is caught too.
+        /// </summary>
+        [HarmonyPatch(typeof(Player), "EatFood")]
+        [HarmonyPrefix]
+        private static void AteFrom(Player __instance, ItemDrop.ItemData item)
+        {
+            if (__instance != Player.m_localPlayer || item?.m_shared == null)
+                return;
+            Slots.Slot slot = Slots.At(item.m_gridPos);
+            if (slot != null && slot.Kind == Slots.Kind.Quick && slot.Index < s_ate.Length)
+                s_ate[slot.Index] = item.m_shared.m_name;
+        }
+
         private static void ShowMatchingFoodTimes(Player player)
         {
+            // Skin bails out without building these if the HUD it expects is not there, and
+            // this runs every frame regardless - so without the guard a missing hudroot is a
+            // null reference per frame rather than one warning at load.
+            if (s_foodFrames == null || s_foodTimes == null)
+                return;
+
             List<Player.Food> foods = player.GetFoods();
 
-            for (int i = 0; i < s_foodTimes.Length; i++)
+            for (int i = 0; i < s_show.Length; i++)
             {
-                TMP_Text text = s_foodTimes[i];
-                if (text == null)
-                    continue;
-
-                Player.Food match = null;
                 ItemDrop.ItemData slot = s_slotItems[i];
-                if (slot?.m_shared != null)
+                int own = IndexOf(foods, slot?.m_shared?.m_name);
+                if (own < 0)
                 {
-                    foreach (Player.Food food in foods)
-                    {
-                        if (food?.m_item?.m_shared != null && food.m_item.m_shared.m_name == slot.m_shared.m_name)
-                        {
-                            match = food;
-                            break;
-                        }
-                    }
+                    own = IndexOf(foods, s_ate[i]);
+                    if (own < 0)
+                        s_ate[i] = null;   // that buff has run out; stop remembering it
                 }
-
-                if (match == null)
-                {
-                    // The slot holds food that is not being digested: that is an invitation, not
-                    // an empty box. Vanilla has nothing to say here because vanilla's three boxes
-                    // only ever show food already eaten.
-                    if (!text.gameObject.activeSelf)
-                        text.gameObject.SetActive(true);
-                    if (text.text != EatLabel)
-                        text.text = EatLabel;
-                    text.color = EatColour;
-                    continue;
-                }
-
-                if (!text.gameObject.activeSelf)
-                    text.gameObject.SetActive(true);
-
-                // Same numbers vanilla's UpdateFood prints.
-                float seconds = match.m_time / Game.m_foodRate;
-                string label = seconds >= 60f
-                    ? Mathf.CeilToInt(seconds / 60f) + "m"
-                    : Mathf.FloorToInt(seconds) + "s";
-                if (text.text != label)
-                    text.text = label;
-
-                // Red, blinking, for the last tenth of THIS food's own duration. A raspberry and
-                // a serpent stew run for very different times, so a fixed "under a minute" warns
-                // far too late on one and far too early on the other.
-                // seconds is already m_time converted by the food rate, so the comparison is in
-                // real seconds and matches the number being displayed.
-                bool nearlyGone = seconds <= LowFoodSeconds;
-                text.color = nearlyGone
-                    ? Color.Lerp(LowFoodDim, LowFoodBright, Mathf.PingPong(Time.time * BlinkSpeed, 1f))
-                    : Color.white;
+                s_show[i] = own;
             }
+
+            for (int i = 0; i < s_show.Length; i++)
+            {
+                ItemDrop.ItemData slot = s_slotItems[i];
+                Player.Food food = s_show[i] >= 0 && s_show[i] < foods.Count ? foods[s_show[i]] : null;
+
+                Draw(i, slot);
+                Countdown(i, slot, food);
+            }
+        }
+
+        private static int IndexOf(List<Player.Food> foods, string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return -1;
+            for (int f = 0; f < foods.Count; f++)
+                if (foods[f]?.m_item?.m_shared != null && foods[f].m_item.m_shared.m_name == name)
+                    return f;
+            return -1;
+        }
+
+        /// <summary>The item picture on a diamond. Only written when it actually changes.</summary>
+        private static void Draw(int index, ItemDrop.ItemData item)
+        {
+            Image frame = s_foodFrames[index];
+            if (frame == null || frame.transform.childCount == 0)
+                return;
+            Image icon = frame.transform.GetChild(0).GetComponent<Image>();
+            if (icon == null)
+                return;
+
+            bool show = item != null;
+            if (icon.gameObject.activeSelf != show)
+                icon.gameObject.SetActive(show);
+            if (!show)
+                return;
+
+            Sprite sprite = item.GetIcon();
+            if (icon.sprite != sprite)
+                icon.sprite = sprite;
+            if (icon.color != Color.white)
+                icon.color = Color.white;
+        }
+
+        private static void Countdown(int index, ItemDrop.ItemData slot, Player.Food food)
+        {
+            TMP_Text text = s_foodTimes[index];
+            if (text == null)
+                return;
+
+            if (food == null)
+            {
+                // Nothing being digested for this diamond. A slot with food in it is an
+                // invitation; an empty one has nothing to say. The same test the slot itself
+                // uses to decide what it will accept, so the two can never disagree.
+                bool edible = Slots.IsFood(slot);
+                if (text.gameObject.activeSelf != edible)
+                    text.gameObject.SetActive(edible);
+                if (!edible)
+                    return;
+                if (text.text != EatLabel)
+                    text.text = EatLabel;
+                text.color = EatColour;
+                return;
+            }
+
+            if (!text.gameObject.activeSelf)
+                text.gameObject.SetActive(true);
+
+            // Same numbers vanilla's UpdateFood prints.
+            float seconds = food.m_time / Game.m_foodRate;
+            string label = seconds >= 60f
+                ? Mathf.CeilToInt(seconds / 60f) + "m"
+                : Mathf.FloorToInt(seconds) + "s";
+            if (text.text != label)
+                text.text = label;
+
+            // Red, blinking, for the last minute. Cartur's call, and the reason is that the
+            // blink is a signal rather than a gauge: it always means the same thing, so it is
+            // learned once and never worked out again.
+            bool nearlyGone = seconds <= LowFoodSeconds;
+            text.color = nearlyGone
+                ? Color.Lerp(LowFoodDim, LowFoodBright, Mathf.PingPong(Time.time * BlinkSpeed, 1f))
+                : Color.white;
         }
 
         // --- guardian power ---
@@ -602,42 +704,42 @@ namespace CarturUIHud
             // Eitr and adrenaline are hidden outright without a pool, rather than vanilla's
             // fade, which would leave an empty frame on screen now the frame is visible. Both
             // are forced on in edit mode so they can be placed.
-            // Both sit in the third row, so only one of them draws. Adrenaline wins it: with
-            // both pools up you are a melee character who happens to have eaten eitr food, and
-            // adrenaline is the one changing several times a second.
+            //
+            // Each answers to its own pool and neither knows about the other, which is how the
+            // game does it (Hud.UpdateEitr and Hud.UpdateAdrenaline never consult each other).
+            // They used to share one slot with adrenaline winning; a trinket gives a permanent
+            // adrenaline pool, so that hid the eitr bar for anyone wearing one.
             float maxEitr = player.GetMaxEitr();
             float maxAdrenaline = player.GetMaxAdrenaline();
 
-            Bars[3].Show(maxAdrenaline > 0f || edit);
-            if (maxAdrenaline > 0f)
-                Bars[3].Drive(player.GetAdrenaline(), maxAdrenaline);
+            // Adrenaline is the one bar whose length follows what you have rather than what you
+            // could have. Every other bar's ceiling moves - eat and your health bar grows - but
+            // the adrenaline pool is set by the trinket and never changes, so a bar sized from it
+            // sat at a fixed length showing nothing. Driving it with the current value as its own
+            // ceiling grows the bar out of the knot as adrenaline builds, and empty means gone
+            // rather than an empty frame, which is also what the game's own HUD does.
+            float adrenaline = player.GetAdrenaline();
+            Bars[3].Show((maxAdrenaline > 0f && adrenaline > 0f) || edit);
+            if (adrenaline > 0f)
+                Bars[3].Drive(adrenaline, adrenaline);
+            else if (edit)
+                Bars[3].Drive(AdrenalineFull, AdrenalineFull);   // full length to place it against
 
-            Bars[2].Show((maxEitr > 0f && maxAdrenaline <= 0f) || edit);
+            Bars[2].Show(maxEitr > 0f || edit);
             if (maxEitr > 0f)
                 Bars[2].Drive(player.GetEitr(), maxEitr);
 
             if (edit && __instance.m_gpRoot != null && !__instance.m_gpRoot.gameObject.activeSelf)
                 __instance.m_gpRoot.gameObject.SetActive(true);
 
-            if (s_quickSlotMode)
-                ShowMatchingFoodTimes(player);
+            ShowMatchingFoodTimes(player);
 
             if (s_started)
                 return;
             s_started = true;
 
-            if (!s_quickSlotMode)
-                return;
-
-            // EQAS builds QuickSlotsHotkeyBar from its own Awake patch, so at ours it may not
-            // exist yet. And the first icon fill needs a player, because logging in with items
-            // already in the slots raises no change event.
-            Transform bar = __instance.transform.Find("hudroot")?.Find("QuickSlotsHotkeyBar");
-            if (bar != null)
-                Hide(bar);
-            else
-                Log.LogWarning("QuickSlotsHotkeyBar not found - quick slot items may show twice");
-
+            // The first icon fill needs a player: logging in with items already in the slots
+            // changes nothing, so nothing would otherwise ask for a refresh.
             RefreshQuickSlots();
         }
 

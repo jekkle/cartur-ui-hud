@@ -22,7 +22,10 @@ namespace CarturUIHud
         private static bool s_hudDone;
         private static bool s_inventoryDone;
         private static bool s_loadingDone;
+        private static bool s_buildMenuDone;
         private static int s_updateCount;
+        private static bool s_barsArmed;
+        private static bool s_barsIdle, s_barsEitr, s_barsAdrenaline;
 
         private static readonly string[] SpriteNeedles =
         {
@@ -39,6 +42,10 @@ namespace CarturUIHud
         [HarmonyPostfix]
         private static void HudAwake(Hud __instance)
         {
+            // Latched here because the dump switches itself off partway through a
+            // boot, and the bar states we want can arrive minutes later.
+            s_barsArmed = Enabled.Value;
+
             if (!Enabled.Value || s_hudDone)
                 return;
             s_hudDone = true;
@@ -77,7 +84,7 @@ namespace CarturUIHud
                 Tree(__instance.transform, "InventoryGui");
 
                 LogPrefab("m_playerGrid.m_elementPrefab", __instance.m_playerGrid?.m_elementPrefab);
-                LogPrefab("m_containerGrid.m_elementPrefab", InventoryScreen.ContainerGrid(__instance)?.m_elementPrefab);
+                LogPrefab("m_containerGrid.m_elementPrefab", __instance.ContainerGrid?.m_elementPrefab);
                 LogPrefab("m_recipeElementPrefab", __instance.m_recipeElementPrefab);
                 LogPrefab("m_dragItemPrefab", __instance.m_dragItemPrefab);
                 LogPrefab("m_trophieElementPrefab", __instance.m_trophieElementPrefab);
@@ -178,6 +185,122 @@ namespace CarturUIHud
             {
                 Log.LogInfo("[dump] failed: " + e);
             }
+        }
+
+        /// <summary>
+        /// The build menu, for the corner-ornament question: the Q, E and F key hints sit on top
+        /// of the frame's corner knots, and a screenshot cannot say whether those hints are
+        /// anchored to the frame or to the content inside it. That decides whether the fix is to
+        /// grow the panel, inset the content, or move the hints - so the anchors get read rather
+        /// than guessed at.
+        ///
+        /// BuildUi.Awake is the same hook BuildMenu.Dress uses, so what this prints is the tree
+        /// as the skin finds it.
+        /// </summary>
+        [HarmonyPatch(typeof(BuildUi), "Awake")]
+        [HarmonyPostfix]
+        private static void BuildMenuAwake(BuildUi __instance)
+        {
+            if (!Enabled.Value || s_buildMenuDone)
+                return;
+            s_buildMenuDone = true;
+
+            try
+            {
+                Tree(__instance.transform, "BuildUi");
+            }
+            catch (System.Exception e)
+            {
+                Log.LogInfo("[dump] build menu failed: " + e);
+            }
+        }
+
+        // --- bars ---
+
+        /// <summary>
+        /// Why the eitr and adrenaline bars do not draw. Everything HudSkin.Frame looks at when
+        /// it decides to show them, plus the state of the panels themselves, logged once per
+        /// pool state. Stamina goes in the same dump as the control: it is built by the same
+        /// code down the same path and it works, so any field that differs is the answer.
+        /// </summary>
+        [HarmonyPatch(typeof(Hud), "Update")]
+        [HarmonyPostfix]
+        private static void BarState()
+        {
+            if (!s_barsArmed)
+                return;
+
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return;
+
+            float maxEitr = player.GetMaxEitr();
+            float maxAdrenaline = player.GetMaxAdrenaline();
+
+            if (maxEitr > 0f && !s_barsEitr)
+                s_barsEitr = true;
+            else if (maxAdrenaline > 0f && !s_barsAdrenaline)
+                s_barsAdrenaline = true;
+            else if (maxEitr <= 0f && maxAdrenaline <= 0f && !s_barsIdle)
+                s_barsIdle = true;
+            else
+                return;
+
+            try
+            {
+                Log.LogInfo("[dump] pools: maxEitr=" + maxEitr + " maxAdrenaline=" + maxAdrenaline
+                    + " adrenaline=" + player.GetAdrenaline() + " editing=" + HudLayout.Editing);
+                LogBar("stamina", HudSkin.Bars[1]);
+                LogBar("eitr", HudSkin.Bars[2]);
+                LogBar("adrenaline", HudSkin.Bars[3]);
+            }
+            catch (System.Exception e)
+            {
+                Log.LogInfo("[dump] failed: " + e);
+            }
+        }
+
+        private static void LogBar(string label, BarSkin bar)
+        {
+            if (bar == null || bar.Panel == null)
+            {
+                Log.LogInfo("[dump] " + label + ": no panel");
+                return;
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("[dump] ").Append(label)
+              .Append(": valid=").Append(bar.Valid)
+              .Append(" activeSelf=").Append(bar.Panel.gameObject.activeSelf)
+              .Append(" inHierarchy=").Append(bar.Panel.gameObject.activeInHierarchy)
+              .Append(" pos=").Append(bar.Panel.anchoredPosition)
+              .Append(" size=").Append(bar.Panel.sizeDelta)
+              .Append(" scale=").Append(bar.Panel.lossyScale);
+
+            sb.Append(" | parents:");
+            for (Transform t = bar.Panel.parent; t != null; t = t.parent)
+                sb.Append(' ').Append(t.name).Append('(').Append(t.gameObject.activeSelf).Append(')');
+
+            if (bar.Frame != null)
+                sb.Append(" | frame enabled=").Append(bar.Frame.enabled)
+                  .Append(" a=").Append(bar.Frame.color.a)
+                  .Append(" sprite=").Append(bar.Frame.sprite != null ? bar.Frame.sprite.name : "null");
+            else
+                sb.Append(" | frame null");
+
+            Image fill = bar.Fast != null && bar.Fast.m_bar != null
+                ? bar.Fast.m_bar.GetComponent<Image>() : null;
+            if (fill != null)
+                sb.Append(" | fill enabled=").Append(fill.enabled)
+                  .Append(" a=").Append(fill.color.a)
+                  .Append(" w=").Append(((RectTransform)fill.transform).rect.width);
+            else
+                sb.Append(" | fill null");
+
+            if (bar.Text != null)
+                sb.Append(" | text=\"").Append(bar.Text.text).Append("\" a=").Append(bar.Text.color.a);
+
+            Log.LogInfo(sb.ToString());
         }
 
         private static void LogPrefab(string label, GameObject prefab)

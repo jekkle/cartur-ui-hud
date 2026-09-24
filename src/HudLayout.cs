@@ -7,6 +7,7 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace CarturUIHud
@@ -38,6 +39,13 @@ namespace CarturUIHud
             public RectTransform Move;   // what gets positioned and scaled
             public RectTransform Hit;    // what the mouse is tested against
             public ConfigEntry<string> Entry;
+
+            /// <summary>
+            /// Where this piece goes on a reset. Empty until saveAsDefault is ticked, and then
+            /// it holds whatever the layout was at that moment - so "default" means the layout
+            /// Cartur built, not the one the mod shipped with.
+            /// </summary>
+            public ConfigEntry<string> HomeEntry;
             public GameObject Overlay;
             public float Scale = 1f;
             // Bars drive their frame height from the wheel instead of localScale: their length
@@ -68,15 +76,17 @@ namespace CarturUIHud
         private static float s_ignoreWritesUntil;
 
         private static bool s_editing;
-        private static Element s_grabbed;
-        private static Vector2 s_grabOffset;
-        private static bool s_frameDrag;
+
+        // Raycasters this mod added so pointer events reach the overlays. Taken off again when
+        // edit mode goes off, so a canvas the game owns is left as it was found.
+        private static readonly List<GraphicRaycaster> s_addedRaycasters = new List<GraphicRaycaster>();
 
         internal static BepInEx.Logging.ManualLogSource Log;
 
         public static bool Editing => s_editing;
 
         private static ConfigEntry<bool> s_reset;
+        private static ConfigEntry<bool> s_saveDefault;
 
         public static void Init(ConfigFile config, ConfigEntry<bool> editMode)
         {
@@ -87,6 +97,13 @@ namespace CarturUIHud
             // it cannot be hit by accident, and it unticks itself once the layout is back.
             s_reset = config.Bind("Layout", "resetLayout", false,
                 "Tick to put every HUD and inventory piece back where the mod would place it. "
+                + "Unticks itself when done.");
+
+            // The other half of resetLayout: this one writes the CURRENT layout down as the
+            // one a reset goes back to. Also a tick box, also unticks itself.
+            s_saveDefault = config.Bind("Layout", "saveAsDefault", false,
+                "Tick to make the layout on screen right now the one resetLayout goes back to. "
+                + "Open the inventory once first, so every piece has been built and is counted. "
                 + "Unticks itself when done.");
 
             // Off, or every frame of a drag writes the whole file to disk.
@@ -159,7 +176,6 @@ namespace CarturUIHud
                 s_elements.RemoveAt(i);
             }
             s_editing = false;
-            s_grabbed = null;
             if (font != null)
                 s_font = font;
 
@@ -171,7 +187,7 @@ namespace CarturUIHud
             s_white = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
         }
 
-        public static void Register(string owner, string key, string label, RectTransform move, RectTransform hit, Vector2 fallbackPosition, float fallbackScale = 1f, Action<float> onScale = null, Action<float> onLength = null, Action<float, Vector2> onFrame = null, float fallbackFrameScale = 1f, float fallbackLength = 1f)
+        public static void Register(string owner, string key, string label, RectTransform move, RectTransform hit, Vector2 fallbackPosition, float fallbackScale = 1f, Action<float> onScale = null, Action<float> onLength = null, Action<float, Vector2> onFrame = null, float fallbackFrameScale = 1f, float fallbackLength = 1f, Vector2? supersededPosition = null)
         {
             if (move == null || hit == null)
                 return;
@@ -191,8 +207,21 @@ namespace CarturUIHud
                 HomeLength = fallbackLength,
                 HomeFrameScale = fallbackFrameScale,
                 Entry = s_config.Bind("Layout", key, Format(fallbackPosition, fallbackScale, fallbackLength, fallbackFrameScale, Vector2.zero),
-                    "Layout of the " + label + ". Written by edit mode; x,y,size,length,frameSize,frameX,frameY.")
+                    "Layout of the " + label + ". Written by edit mode; x,y,size,length,frameSize,frameX,frameY."),
+                HomeEntry = s_config.Bind("Layout defaults", key, "",
+                    "Where the " + label + " goes on a reset. Written by saveAsDefault; empty means the mod's own.")
             };
+
+            // A default that was saved from the screen wins over the one written in the code.
+            // Same format as the layout itself, so the two can be compared by eye in the file.
+            if (TryParse(element.HomeEntry.Value, out Vector2 homePos, out float homeScale,
+                    out float homeLength, out float homeFrame, out Vector2 _))
+            {
+                element.HomePosition = homePos;
+                element.HomeScale = homeScale;
+                element.HomeLength = homeLength;
+                element.HomeFrameScale = homeFrame;
+            }
 
             if (!TryParse(element.Entry.Value, out Vector2 position, out float scale, out float length, out float frameScale, out Vector2 frameOff))
             {
@@ -204,6 +233,18 @@ namespace CarturUIHud
                 Log.LogWarning("could not read layout for " + key + " (\"" + element.Entry.Value + "\") - using the default");
             }
 
+            // A position a previous version wrote as its default, which this version no longer
+            // places anything at. Compared on position alone, so it survives the entry gaining
+            // fields, and it leaves the size and length the player chose alone.
+            if (supersededPosition.HasValue
+                && Mathf.Approximately(position.x, supersededPosition.Value.x)
+                && Mathf.Approximately(position.y, supersededPosition.Value.y))
+            {
+                position = fallbackPosition;
+                element.Entry.Value = Format(position, scale, length, frameScale, frameOff);
+                Log.LogInfo("moved " + key + " off the position an older version defaulted it to");
+            }
+
             element.Scale = Mathf.Clamp(scale, MinScale, MaxScale);
             element.Length = Mathf.Clamp(length, MinScale, MaxScale);
             element.FrameScale = Mathf.Clamp(frameScale, MinScale, MaxScale);
@@ -212,6 +253,19 @@ namespace CarturUIHud
             Apply(element);
 
             s_elements.Add(element);
+
+            // Overlays were only ever built in Toggle, which runs when edit mode changes. Half
+            // the registrations happen after that: the equipment panel, the quiver strip and the
+            // side column are all built lazily on the first InventoryGui.Show, so anything
+            // registered while edit mode was already on had no handle and could not be dragged
+            // until the player turned edit mode off and on again. A piece registering into a
+            // live edit session gets its overlay here instead.
+            if (s_editing)
+            {
+                EnsureOverlay(element);
+                if (element.Overlay != null)
+                    element.Overlay.SetActive(true);
+            }
         }
 
         /// <summary>Driven from the Hud.Update postfix.</summary>
@@ -227,6 +281,9 @@ namespace CarturUIHud
                 }
             }
 
+            if (s_saveDefault != null && s_saveDefault.Value)
+                SaveAsDefaults();
+
             if (s_reset != null && s_reset.Value)
                 ResetToDefaults();
 
@@ -234,56 +291,32 @@ namespace CarturUIHud
             // settings and cannot be hit by accident mid-fight.
             if (s_editMode.Value != s_editing)
                 Toggle();
+        }
 
-            if (!s_editing)
-                return;
-
-            Vector2 mouse = Input.mousePosition;
-
-            if (Input.GetMouseButtonDown(0))
-                Grab(mouse);
-            else if (Input.GetMouseButton(0) && s_grabbed != null)
+        /// <summary>
+        /// Writes the layout that is on screen right now down as the one a reset returns to.
+        ///
+        /// Kept in its own config section rather than overwriting the numbers in the code: the
+        /// file can be read side by side - what a piece is at, and what it goes back to - and
+        /// clearing a line there hands that piece back to the mod's own default without
+        /// touching anything else.
+        /// </summary>
+        private static void SaveAsDefaults()
+        {
+            foreach (Element e in s_elements)
             {
-                Vector2 local = ToLocal(s_grabbed.Move, mouse) - s_grabOffset;
-                if (s_frameDrag)
-                {
-                    s_grabbed.FrameOffset = local;
-                    Apply(s_grabbed);
-                }
-                else
-                {
-                    s_grabbed.Move.anchoredPosition = local;
-                }
-            }
-            else if (Input.GetMouseButtonUp(0) && s_grabbed != null)
-            {
-                Save(s_grabbed);
-                Persist();
-                s_grabbed = null;
+                e.HomePosition = e.Move.anchoredPosition;
+                e.HomeScale = e.Scale;
+                e.HomeLength = e.Length;
+                e.HomeFrameScale = e.FrameScale;
+                e.HomeEntry.Value = Format(e.HomePosition, e.HomeScale, e.HomeLength, e.HomeFrameScale, Vector2.zero);
             }
 
-            float wheel = Input.mouseScrollDelta.y;
-            if (Mathf.Abs(wheel) > 0.01f)
-            {
-                Element under = s_grabbed ?? Find(mouse);
-                if (under != null)
-                {
-                    float step = Mathf.Sign(wheel) * ScaleStep;
-                    // Plain wheel is size, shift is the bar's length, ctrl is the frame around
-                    // it. Length has to be a control of its own because it is otherwise the
-                    // game's to set, from max health; the frame has to be its own because
-                    // fitting Cartur's art to the fill is not something a size can express.
-                    if (Ctrl() && under.OnFrame != null)
-                        under.FrameScale = Mathf.Clamp(under.FrameScale + step, MinScale, MaxScale);
-                    else if (Shift() && under.OnLength != null)
-                        under.Length = Mathf.Clamp(under.Length + step, MinScale, MaxScale);
-                    else
-                        under.Scale = Mathf.Clamp(under.Scale + step, MinScale, MaxScale);
-                    Apply(under);
-                    Save(under);
-                    Persist();
-                }
-            }
+            s_saveDefault.Value = false;
+            Persist();
+            Log.LogInfo("layout saved as the default - " + s_elements.Count
+                + " pieces will reset to where they are now. Any piece not built yet was not"
+                + " counted; tick it again with the inventory open to catch those.");
         }
 
         /// <summary>Every piece back to the position the mod would give it with no config at all.</summary>
@@ -316,6 +349,11 @@ namespace CarturUIHud
                     e.Overlay.SetActive(s_editing);
             }
 
+            if (s_editing)
+                AddRaycasters();
+            else
+                RemoveRaycasters();
+
             // GameCamera.m_mouseCapture is the game's own cursor lock. Its only other writer is
             // the Ctrl+F1 debug toggle, so it never resets itself - leaving it false on exit
             // would lock the player out of camera look until they found that shortcut. Flipping
@@ -327,62 +365,233 @@ namespace CarturUIHud
                 Log.LogWarning("no GameCamera - the cursor will not be released for editing");
 
             if (!s_editing)
-            {
-                s_grabbed = null;
                 Persist();
-            }
 
             Log.LogInfo(s_editing
                 ? "layout edit on - drag: move | wheel: size | shift+wheel: bar length | ctrl+wheel: frame size | ctrl+drag: frame offset"
                 : "layout edit off - saved to " + s_config.ConfigFilePath);
         }
 
-        private static void Grab(Vector2 mouse)
+        /// <summary>
+        /// A canvas only delivers pointer events if it has a GraphicRaycaster. Vanilla's HUD
+        /// canvas is not ours, so whether it carries one is read here rather than assumed, and
+        /// one is added only for as long as edit mode is on.
+        /// </summary>
+        private static void AddRaycasters()
         {
-            s_grabbed = Find(mouse);
-            if (s_grabbed == null)
-                return;
+            foreach (Element e in s_elements)
+            {
+                Canvas canvas = e.Hit != null ? e.Hit.GetComponentInParent<Canvas>() : null;
+                if (canvas == null)
+                {
+                    Log.LogWarning("no canvas above " + e.Key + " - it cannot be dragged");
+                    continue;
+                }
 
-            s_frameDrag = Ctrl() && s_grabbed.OnFrame != null;
-            Vector2 anchor = s_frameDrag ? s_grabbed.FrameOffset : s_grabbed.Move.anchoredPosition;
-            s_grabOffset = ToLocal(s_grabbed.Move, mouse) - anchor;
+                if (canvas.GetComponent<GraphicRaycaster>() != null)
+                    continue;
+
+                var caster = canvas.gameObject.AddComponent<GraphicRaycaster>();
+                s_addedRaycasters.Add(caster);
+                Log.LogInfo("added a GraphicRaycaster to " + canvas.name + " for edit mode");
+            }
+
+            if (EventSystem.current == null)
+                Log.LogWarning("no EventSystem - nothing can be dragged");
+        }
+
+        private static void RemoveRaycasters()
+        {
+            foreach (GraphicRaycaster caster in s_addedRaycasters)
+                if (caster != null)
+                    UnityEngine.Object.Destroy(caster);
+            s_addedRaycasters.Clear();
         }
 
         private static bool Ctrl() => Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
         private static bool Shift() => Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
 
-        /// <summary>Topmost element under the cursor, so overlapping pieces pick the front one.</summary>
-        private static Element Find(Vector2 mouse)
+        /// <summary>
+        /// Drag and wheel for one piece, driven by Unity's own pointer events.
+        ///
+        /// This used to read Input.GetMouseButton and hit-test every registered piece against
+        /// Input.mousePosition by hand. That worked here and not on other people's machines -
+        /// reported on 1.0.2 as the overlay appearing with nothing draggable - and there is no
+        /// reason to be doing it: the EventSystem already works out what the cursor is over,
+        /// which is how the compass mod's edit mode does the same job. The overlay was already a
+        /// raycast target, so the handler goes straight on it and the hand-rolled hit test goes.
+        ///
+        /// The camera comes off the event rather than from the canvas, so a screen-space and a
+        /// camera-space canvas both land in the right place with nothing here to get wrong.
+        /// </summary>
+        private class EditHandle : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IScrollHandler
         {
-            Element best = null;
-            int bestDepth = -1;
-            foreach (Element e in s_elements)
+            private Element m_element;
+            private Vector2 m_grabOffset;
+            private bool m_frameDrag;
+            private bool m_resizing;
+            private float m_resizeFrom;
+            private float m_resizeScale;
+
+            public void Init(Element element) => m_element = element;
+
+            public void OnBeginDrag(PointerEventData eventData)
             {
-                if (!RectTransformUtility.RectangleContainsScreenPoint(e.Hit, mouse, Cam(e.Hit)))
-                    continue;
-                int depth = e.Hit.GetSiblingIndex();
-                if (depth >= bestDepth)
+                if (m_element == null || !s_editing)
+                    return;
+
+                m_frameDrag = Ctrl() && m_element.OnFrame != null;
+                float reach = 0f;
+                m_resizing = !m_frameDrag
+                    && OnBorder(m_element, eventData.pressPosition, eventData.pressEventCamera, out reach);
+                if (m_resizing)
                 {
-                    best = e;
-                    bestDepth = depth;
+                    // Scale is driven by how much further the cursor gets from the middle than it
+                    // started, so the piece follows the hand at whatever size it already was. The
+                    // wheel writes the same field, so a drag and a wheel cannot disagree.
+                    m_resizeFrom = reach;
+                    m_resizeScale = m_element.Scale;
+                    return;
+                }
+
+                Vector2 anchor = m_frameDrag ? m_element.FrameOffset : m_element.Move.anchoredPosition;
+                m_grabOffset = ToLocal(m_element.Move, eventData.pressPosition, eventData.pressEventCamera) - anchor;
+            }
+
+            public void OnDrag(PointerEventData eventData)
+            {
+                if (m_element == null || !s_editing)
+                    return;
+
+                if (m_resizing)
+                {
+                    if (OnReach(m_element, eventData.position, eventData.pressEventCamera, out float reach) && reach > 1f)
+                    {
+                        m_element.Scale = Mathf.Clamp(m_resizeScale * (reach / m_resizeFrom), MinScale, MaxScale);
+                        Apply(m_element);
+                    }
+                    return;
+                }
+
+                Vector2 local = ToLocal(m_element.Move, eventData.position, eventData.pressEventCamera) - m_grabOffset;
+                if (m_frameDrag)
+                {
+                    m_element.FrameOffset = local;
+                    Apply(m_element);
+                }
+                else
+                {
+                    m_element.Move.anchoredPosition = local;
                 }
             }
-            return best;
+
+            public void OnEndDrag(PointerEventData eventData)
+            {
+                if (m_element == null)
+                    return;
+
+                m_resizing = false;
+                Save(m_element);
+                Persist();
+            }
+
+            public void OnScroll(PointerEventData eventData)
+            {
+                if (m_element == null || !s_editing)
+                    return;
+
+                float wheel = eventData.scrollDelta.y;
+                if (Mathf.Abs(wheel) < 0.01f)
+                    return;
+
+                float step = Mathf.Sign(wheel) * ScaleStep;
+                // Plain wheel is size, shift is the bar's length, ctrl is the frame around it.
+                // Length has to be a control of its own because it is otherwise the game's to
+                // set, from max health; the frame has to be its own because fitting Cartur's art
+                // to the fill is not something a size can express.
+                if (Ctrl() && m_element.OnFrame != null)
+                    m_element.FrameScale = Mathf.Clamp(m_element.FrameScale + step, MinScale, MaxScale);
+                else if (Shift() && m_element.OnLength != null)
+                    m_element.Length = Mathf.Clamp(m_element.Length + step, MinScale, MaxScale);
+                else
+                    m_element.Scale = Mathf.Clamp(m_element.Scale + step, MinScale, MaxScale);
+
+                Apply(m_element);
+                Save(m_element);
+                Persist();
+            }
         }
 
-        private static Vector2 ToLocal(RectTransform rt, Vector2 mouse)
+        /// <summary>
+        /// Is the cursor in the grab band just inside a piece's outline, and if so how far is it
+        /// from the middle?
+        ///
+        /// The distance is measured on the axes the grabbed border actually has: a left or right
+        /// edge measures across, a top or bottom edge measures up, a corner measures both. That
+        /// is what makes an edge drag feel like an edge drag even though the result is the same
+        /// uniform scale either way - Scale is a localScale, one number, because the game rewrites
+        /// the bars' width every frame and anything written to sizeDelta is gone next frame. So
+        /// this cannot stretch one axis on its own, and no edge pretends to.
+        /// </summary>
+        private static bool OnBorder(Element e, Vector2 screen, Camera cam, out float reach)
         {
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(rt.parent as RectTransform, mouse, Cam(rt), out Vector2 local);
+            reach = 0f;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(e.Hit, screen, cam, out Vector2 local))
+                return false;
+
+            Rect r = e.Hit.rect;
+            float band = Mathf.Clamp(Mathf.Min(r.width, r.height) * 0.25f, 3f, 14f);
+            bool across = local.x <= r.xMin + band || local.x >= r.xMax - band;
+            bool up = local.y <= r.yMin + band || local.y >= r.yMax - band;
+            if (!across && !up)
+                return false;
+
+            // How far out the grab was, measured exactly the way the drag measures it. It used
+            // to be measured here per axis - dx alone for a side edge, dy alone for a top or
+            // bottom one - while the drag used the full diagonal, so the number jumped the
+            // instant the button went down and the piece resized before the mouse had moved.
+            reach = Reach(e, screen, cam);
+
+            // A grab right on the middle has nothing to measure against and would divide by it.
+            return reach > 1f;
+        }
+
+        /// <summary>
+        /// Distance from the piece's middle to the cursor, in the PARENT's units.
+        ///
+        /// The parent, not the piece itself, and that is the whole of it. A piece is resized by
+        /// localScale, and its own local space lives inside that scale - so the same screen
+        /// point maps to a smaller local number as the piece grows. Measuring there and then
+        /// setting the scale from what came back closed a loop:
+        ///
+        ///     reach ~ D / scale,  scale = startScale * reach / startReach
+        ///
+        /// which inverts the scale every frame. On screen that was a piece jumping between tiny
+        /// and huge on a pixel of mouse movement, which is what Cartur reported. The parent's
+        /// space does not move when the child scales, so reach is proportional to the distance
+        /// the hand actually travelled and the size follows it straight.
+        /// </summary>
+        private static float Reach(Element e, Vector2 screen, Camera cam)
+        {
+            var parent = e.Hit.parent as RectTransform;
+            if (parent == null)
+                return 0f;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen, cam, out Vector2 local))
+                return 0f;
+            Vector3 centre = parent.InverseTransformPoint(e.Hit.TransformPoint(e.Hit.rect.center));
+            return (local - (Vector2)centre).magnitude;
+        }
+
+        private static bool OnReach(Element e, Vector2 screen, Camera cam, out float reach)
+        {
+            reach = Reach(e, screen, cam);
+            return reach > 0f;
+        }
+
+        private static Vector2 ToLocal(RectTransform rt, Vector2 screen, Camera cam)
+        {
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(rt.parent as RectTransform, screen, cam, out Vector2 local);
             return local;
-        }
-
-        // Overlay canvases hit-test with a null camera; a camera-space canvas needs its own.
-        private static Camera Cam(RectTransform rt)
-        {
-            Canvas canvas = rt.GetComponentInParent<Canvas>();
-            if (canvas == null)
-                return null;
-            return canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
         }
 
         private const float BorderWidth = 3f;
@@ -429,6 +638,9 @@ namespace CarturUIHud
             blocker.sprite = s_white;
             blocker.color = new Color(1f, 1f, 1f, 0f);
             blocker.raycastTarget = true;
+
+            // The blocker is what the EventSystem hits, so the drag and wheel handler goes on it.
+            e.Overlay.AddComponent<EditHandle>().Init(e);
 
             // A border of four thin strips rather than a UI Outline: Outline works by drawing
             // offset copies of the graphic, so on a filled rect it gives a bigger filled rect,

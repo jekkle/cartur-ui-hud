@@ -58,24 +58,147 @@ namespace CarturUIHud
         /// </summary>
         internal static float MinWindowUnits => 24f;
 
-        private static Texture2D s_barFrame, s_barFill, s_foodFrame;
+        private static Texture2D s_barFrame, s_barFill, s_enemyFill, s_foodFrame;
 
         // The menu pieces, built by tools/art/assemble.py out of the two sprites above. Each is
         // authored at 2 px per canvas unit with the 9-slice border listed here in source px;
         // Skin creates them at 2 x the canvas ppu so they draw at their authored unit size.
         // A sprite is cached per canvas ppu, because the loading screen is a separate root
         // canvas from IngameGui and the two need not agree.
-        private static readonly (string name, float border)[] s_pieces =
+        // name, 9-slice border in source px, and the px per canvas unit the art was drawn at.
+        // The third column used to be one constant for the whole kit; the two panel pieces
+        // below come from a different pack drawn at a different size, and the border is what
+        // has to land at a sensible number of units, so each piece carries its own.
+        private static readonly (string name, float border, float perUnit)[] s_pieces =
         {
-            ("panel", 24), ("panel_selected", 24), ("well", 16), ("slot", 16), ("slot_selected", 16),
-            ("button", 20), ("button_hover", 20), ("button_pressed", 20), ("button_disabled", 20),
-            ("tab", 20), ("tab_hover", 20), ("tab_selected", 20),
-            ("field", 16), ("field_hover", 16), ("field_disabled", 16), ("tooltip", 20),
+            ("panel", 24, PieceAuthoredPxPerUnit), ("panel_selected", 24, PieceAuthoredPxPerUnit),
+            // The panes, cells and boxes. These carried the old kit's own rail until Cartur
+            // pointed at "the grey on the edge": that rail was authored with a grey-lit top,
+            // and beside the pack's rule it read as a grey outline round everything inside a
+            // window. Measured across his screenshot, the window's rule runs 92,74,49 - 43
+            // apart - while those rails ran 99,89,77, only 22 apart. They carry the same rule
+            // as the panels now.
+            //
+            // The border is 28px like every other piece cut from that rule, and the px per unit
+            // is set so the rail lands at the same thickness in units it already had - 8 for a
+            // pane or a cell, 10 for a tooltip - so nothing moves on screen, only the colour.
+            ("well", 20, 2.5f),
+
+            // The cells wear the equipment panel's own slot border, keyed off that art: a 3px
+            // gold line with a cut corner and nothing inside it, so a cell shows the panel
+            // behind it the way an equipment slot does. 144px drawn at 64 units is 2.25 px per
+            // unit, and the 26px border carries the corner without reaching the straight run.
+            ("slot", 26, 2.25f),
+            ("slot_selected", 16, PieceAuthoredPxPerUnit),
+            ("button", 20, PieceAuthoredPxPerUnit), ("button_hover", 20, PieceAuthoredPxPerUnit),
+            ("button_pressed", 20, PieceAuthoredPxPerUnit), ("button_disabled", 20, PieceAuthoredPxPerUnit),
+            // Same 20px border as the button it is cut from - see tools/art/menu_button.py.
+            ("button_light", 20, PieceAuthoredPxPerUnit),
+            ("tab", 20, PieceAuthoredPxPerUnit), ("tab_hover", 20, PieceAuthoredPxPerUnit),
+            ("tab_selected", 20, PieceAuthoredPxPerUnit),
+            // Text fields take the rule thinner than a panel does. Measured on the world select:
+            // the password box is 38px tall and the rule at 8 units ate 10px top and bottom,
+            // leaving a 20px interior for 21px of text - so the text sat on the rule. At 4 px
+            // per unit the rule draws 5 units and the interior is 19, which the text clears.
+            ("field", 20, 4f), ("field_hover", 20, 4f), ("field_disabled", 20, 4f),
+            ("tooltip", 20, 2.0f),
+
+            // Cartur's own frame, composited over the fill by tools/art/panels.py. The art has
+            // a transparent centre, so the fill goes down first and the rule sits directly on
+            // it - there is no second fill inside the frame to disagree with ours, which is the
+            // mismatch he was looking at.
+            //
+            // Measured off refs_frame.png: the rule is 19-20px deep and flush to the edge, and
+            // the corner knot reaches 57px in, so 57 is the border. 1.425 px per unit draws
+            // that corner at 40 units - what the old knot drew - and the rule at 13.3, against
+            // the 12.7 the piece it replaces had. Nothing changes size on screen.
+            ("panel_ornate", 57, 1.425f),
+
+            // The same panel cut down for a wide, short piece: the two 88px caps with a 36px
+            // band of the fill between them instead of 967px. A 9-slice stretches its centre to
+            // whatever it is given, and the hotbar's centre is about 32 units tall - so the
+            // full panel's fill was being squashed thirty times over into horizontal streaks.
+            // Cut from the same file, at the same border, so it is the same frame.
+            ("panel_ornate_bar", 57, 1.425f),
+
+            // The same frame with nothing behind it, for drawing over something that has to
+            // stay visible - the map and the minimap. Transparent centre AND transparent
+            // between the rule and the centre, so only the gold draws.
+            ("panel_frame", 57, 1.425f),
+
+            // The same rule with the knots taken off, mitred at the corners - built from that
+            // file's own edges, not drawn by hand. 3.5 px per unit puts its band at 8 units,
+            // which is an eighth of the 64-unit boxes it goes on. 312x312, so 256px of the
+            // pack's fill sits inside the rule: the first cut of this was 64x64, which left an
+            // 8x8 centre for a 9-slice to blow up across the whole box.
+            ("panel_thin", 20, 2.5f),
+
+            // Buttons and tabs, same rule and no knots. Their centre is cut wide and short -
+            // 384x48 - because that is the shape a button is: a square centre stretched into a
+            // button squashes its grain into streaks, which is the same fault that made the
+            // crafting window look low resolution. 4.5 px per unit puts the band at 6.2 units,
+            // about a sixth of a 40-unit button.
+            //
+            // The four button tones and the three tab tones are the ratios measured off the
+            // kit's own button set (hover 1.141/1.110/1.058, pressed 0.833, and so on), so the
+            // new family reads the same way under the hand as the old one.
+            ("button_thin", 20, 3.2f), ("button_thin_hover", 20, 3.2f),
+            ("button_thin_pressed", 20, 3.2f), ("button_thin_disabled", 20, 3.2f),
+            ("tab_thin", 20, 3.2f), ("tab_thin_hover", 20, 3.2f), ("tab_thin_selected", 20, 3.2f),
         };
-        private const float PieceAuthoredPxPerUnit = 2f;
+        internal const float PieceAuthoredPxPerUnit = 2f;
         private static readonly Dictionary<string, Texture2D> s_pieceTex = new Dictionary<string, Texture2D>();
         private static readonly Dictionary<string, float> s_pieceBorder = new Dictionary<string, float>();
+        private static readonly Dictionary<string, float> s_pieceUnit = new Dictionary<string, float>();
         private static readonly Dictionary<string, Sprite> s_pieceSprites = new Dictionary<string, Sprite>();
+
+        // The knot that sits in the middle of the wood panel's top and bottom rails. It cannot
+        // live in the panel sprite: a 9-slice stretches one slice of an edge along the whole run,
+        // so a knot in there smears across the side. It is drawn as its own sprite instead,
+        // anchored to the centre of the edge, which keeps it the same size at any panel size.
+        //
+        // There are two of them, because the art's two rails are not the same. Measured on the
+        // source export (1438x874, the file the panel was cut from): the top rail's bright line
+        // sits 6px in from the edge and its centre ornament is 374px wide; the bottom rail's line
+        // sits 22px in and its ornament is 158px wide. The bottom knot used to be the top one with
+        // localScale.y = -1, which put a wider ornament on the wrong rail with its line 19px out of
+        // register - on screen that read as a bright band in a different colour lying across the
+        // rail, which is what Cartur reported. Each rail now carries its own cut.
+        private static Texture2D s_knotTex, s_knotBottomTex, s_shieldExcluded;
+
+        // The equipment panel's artwork: one picture, drawn whole, with the seven slot boxes
+        // and their names painted into it. Not a 9-slice - the layout IS the art, so it is
+        // drawn Simple at the size the measured boxes give (see EquipmentPanel).
+        private static Texture2D s_equipmentPanel;
+        private static readonly Dictionary<float, Sprite> s_knotSprites = new Dictionary<float, Sprite>();
+        private static readonly Dictionary<float, Sprite> s_knotBottomSprites = new Dictionary<float, Sprite>();
+
+        public static Sprite Knot(float referencePixelsPerUnit, bool bottom = false)
+        {
+            Texture2D tex = bottom ? s_knotBottomTex : s_knotTex;
+            if (tex == null)
+                return null;
+            Dictionary<float, Sprite> cache = bottom ? s_knotBottomSprites : s_knotSprites;
+            if (cache.TryGetValue(referencePixelsPerUnit, out Sprite cached))
+                return cached;
+            Sprite sprite = Make(tex, Vector4.zero, referencePixelsPerUnit * PieceAuthoredPxPerUnit);
+            sprite.name = bottom ? "cartur_panel_knot_bottom" : "cartur_panel_knot";
+            cache[referencePixelsPerUnit] = sprite;
+            return sprite;
+        }
+
+        /// <summary>
+        /// How deep a piece's 9-slice border draws, in canvas units, at an Image with the
+        /// default pixelsPerUnitMultiplier of 1. Asked for rather than worked out again at the
+        /// call site, so a piece that gets re-authored moves everything that depends on it.
+        /// </summary>
+        public static float PieceBorderUnits(string name)
+        {
+            if (!s_pieceBorder.TryGetValue(name, out float border))
+                return 0f;
+            float perUnit = s_pieceUnit.TryGetValue(name, out float u) ? u : PieceAuthoredPxPerUnit;
+            return perUnit > 0f ? border / perUnit : 0f;
+        }
 
         /// <summary>A menu piece as a sliced sprite for the given canvas ppu, or null if the PNG is missing.</summary>
         public static Sprite Piece(string name, float referencePixelsPerUnit)
@@ -87,7 +210,8 @@ namespace CarturUIHud
                 return null;
 
             float b = s_pieceBorder[name];
-            Sprite sprite = Make(tex, new Vector4(b, b, b, b), referencePixelsPerUnit * PieceAuthoredPxPerUnit);
+            float perUnit = s_pieceUnit.TryGetValue(name, out float u) ? u : PieceAuthoredPxPerUnit;
+            Sprite sprite = Make(tex, new Vector4(b, b, b, b), referencePixelsPerUnit * perUnit);
             sprite.name = "cartur_" + name;
             s_pieceSprites[key] = sprite;
             return sprite;
@@ -95,13 +219,41 @@ namespace CarturUIHud
 
         public static Sprite BarFrame { get; private set; }
         public static Sprite BarFill { get; private set; }
+
+        /// <summary>
+        /// The enemy bars' fill: the same knotwork lifted into 150..255 by tools/art/enemy_fill.py.
+        /// A tint can only multiply, and the game paints these bars in bright colours of its own
+        /// (255,85,85 hostile, 67,255,32 tamed, 255,0,100 boss), so the low-toned HUD fill dragged
+        /// them to near black. Separate file because bar_fill is shared with the HUD's own bars.
+        /// </summary>
+        public static Sprite EnemyFill { get; private set; }
         /// <summary>
         /// The diamond. Used for the three food boxes and for the guardian power box - by
         /// design, not as a stand-in: the power box is meant to read as one of the same family.
         /// </summary>
         public static Sprite FoodFrame { get; private set; }
 
+        /// <summary>
+        /// The mark drawn over a one-handed weapon that has been told not to call the shield
+        /// (see ShieldSlot). Optional on purpose: until the art exists the exclusion still
+        /// works, it just has nothing to show for itself, which is better than shipping a
+        /// stand-in that does not match the rest.
+        /// </summary>
+        public static Sprite ShieldExcluded { get; private set; }
+
+        /// <summary>
+        /// The equipment panel's artwork, or null if the PNG is missing - and then the panel
+        /// falls back to the plain 9-sliced piece it used before, rather than nothing.
+        /// </summary>
+        public static Sprite EquipmentPanel { get; private set; }
+
         public static string AssetsDir { get; private set; }
+
+        /// <summary>Swap the panel piece for the generated wood one. Set before LoadTextures.</summary>
+        public static bool WoodPanel { get; set; }
+
+        /// <summary>The wood panel's own rail, in source px. Measured off the art, not chosen.</summary>
+        private const float WoodPanelBorder = 101f;
 
         public static bool LoadTextures(BepInEx.Logging.ManualLogSource log)
         {
@@ -109,14 +261,26 @@ namespace CarturUIHud
 
             s_barFrame = Load("bar_frame.png", log);
             s_barFill = Load("bar_fill.png", log);
+            s_enemyFill = Load("bar_fill_enemy.png", log);
             s_foodFrame = Load("food_frame.png", log);
+            s_knotTex = Load("panel_knot.png", log);
+            s_knotBottomTex = Load("panel_knot_bottom.png", log);
+            s_shieldExcluded = Load("shield_excluded.png", log);
+            s_equipmentPanel = Load("equipment_panel.png", log);
 
             // Menu pieces are optional: a missing one leaves that vanilla sprite alone, which
             // Skin logs, rather than taking the HUD down with it.
-            foreach ((string name, float border) in s_pieces)
+            foreach ((string name, float border, float perUnit) in s_pieces)
             {
-                s_pieceTex[name] = Load(name + ".png", log);
-                s_pieceBorder[name] = border;
+                s_pieceUnit[name] = perUnit;
+                // The wood panel is a drop-in for this one piece only, and it carries its own
+                // border: its corner knotwork is 101px deep in the art it was cut from, and a 9-slice
+                // border has to cover the corner or the ornament gets stretched. Forcing it to the built
+                // panel's 48 meant upscaling a 30px bevel, which blurred it and threw the corner
+                // mitres out of line with the edges - measured, after it looked wrong on screen.
+                bool wood = name == "panel" && WoodPanel;
+                s_pieceTex[name] = Load(wood ? "panel_wood.png" : name + ".png", log);
+                s_pieceBorder[name] = wood ? WoodPanelBorder : border;
             }
 
             return s_barFrame != null && s_barFill != null && s_foodFrame != null;
@@ -144,8 +308,21 @@ namespace CarturUIHud
             // uncovers less knotwork rather than squashing it.
             BarFill = Make(s_barFill, Vector4.zero, fillPpu);
 
+            // Drawn Simple, stretched to whatever the game sized the bar, so ppu only has to not
+            // be zero. Not Tiled like BarFill: an enemy bar is 100x5 units and one tile of this art
+            // is 975x48.5, so tiling showed a tenth of it - a sliver with no pattern in it.
+            if (s_enemyFill != null)
+                EnemyFill = Make(s_enemyFill, Vector4.zero, referencePixelsPerUnit);
+
             // Drawn Simple with preserveAspect, so ppu only has to not be zero.
             FoodFrame = Make(s_foodFrame, Vector4.zero, referencePixelsPerUnit);
+
+            if (s_shieldExcluded != null)
+                ShieldExcluded = Make(s_shieldExcluded, Vector4.zero, referencePixelsPerUnit);
+
+            // Simple and stretched to the panel's rect, so the ppu only has to not be zero.
+            if (s_equipmentPanel != null)
+                EquipmentPanel = Make(s_equipmentPanel, Vector4.zero, referencePixelsPerUnit);
 
             log.LogInfo($"canvas referencePixelsPerUnit {referencePixelsPerUnit}; frame ppu {framePpu:0.##}, fill ppu {fillPpu:0.##}, ornaments {FrameLeftUnits:0.#} + {FrameRightUnits:0.#}, natural window {NaturalWindowUnits:0.#}, at {BaseBarHeight} tall");
         }
@@ -164,9 +341,19 @@ namespace CarturUIHud
                 border);
         }
 
-        private static Texture2D Load(string fileName, BepInEx.Logging.ManualLogSource log)
+        /// <summary>
+        /// A texture from any path under the assets folder. Same loader as the kit's own
+        /// pieces - ImageConversion reads PNG and JPG alike - exposed for the loading screens,
+        /// which are photographs rather than kit art and are loaded one at a time.
+        /// </summary>
+        internal static Texture2D LoadFile(string path, BepInEx.Logging.ManualLogSource log) =>
+            Read(path, log);
+
+        private static Texture2D Load(string fileName, BepInEx.Logging.ManualLogSource log) =>
+            Read(Path.Combine(AssetsDir, fileName), log);
+
+        private static Texture2D Read(string path, BepInEx.Logging.ManualLogSource log)
         {
-            string path = Path.Combine(AssetsDir, fileName);
             if (!File.Exists(path))
             {
                 log.LogWarning("asset missing: " + path);

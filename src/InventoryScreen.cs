@@ -19,9 +19,8 @@ namespace CarturUIHud
     {
         internal const string Owner = "inventory";
 
-        // m_playerGrid is public, m_containerGrid is not.
-        private static readonly FieldInfo s_containerGrid = AccessTools.Field(typeof(InventoryGui), "m_containerGrid");
-        internal static InventoryGrid ContainerGrid(InventoryGui gui) => s_containerGrid?.GetValue(gui) as InventoryGrid;
+        // Both grids are reachable without reflection: m_playerGrid is a public field and the
+        // container's is behind the public ContainerGrid property.
 
         internal static BepInEx.Logging.ManualLogSource Log;
 
@@ -34,7 +33,7 @@ namespace CarturUIHud
 
             Skin.Apply(__instance.transform, "inventory", ppu);
             Skin.Apply(__instance.m_playerGrid?.m_elementPrefab?.transform, "inventory element prefab", ppu);
-            Skin.Apply(ContainerGrid(__instance)?.m_elementPrefab?.transform, "container element prefab", ppu);
+            Skin.Apply(__instance.ContainerGrid?.m_elementPrefab?.transform, "container element prefab", ppu);
             Skin.Apply(__instance.m_recipeElementPrefab?.transform, "recipe row prefab", ppu);
             Skin.Apply(__instance.m_dragItemPrefab?.transform, "drag item prefab", ppu);
             Skin.Apply(__instance.m_trophieElementPrefab?.transform, "trophy element prefab", ppu);
@@ -50,7 +49,34 @@ namespace CarturUIHud
             Register("crafting", "Crafting", __instance.m_crafting);
             Register("info", "Info", __instance.m_info);
 
+            Room(__instance);
             Log.LogInfo("inventory skinned, 4 panels registered for edit mode");
+        }
+
+        /// <summary>
+        /// Gives the player panel the room HotbarRow takes.
+        ///
+        /// The hotbar row carries a frame, and the rows under it drop to clear its rail - so
+        /// the grid is that much taller than vanilla thinks. Vanilla owns this height and
+        /// recomputes it from scratch whenever the rows change:
+        ///
+        ///     m_player.sizeDelta = (x, m_playerHeight + rows * m_invGridHeight)
+        ///
+        /// so adding the shift after it has run cannot accumulate. Applied at Awake as well,
+        /// because a character that has never had a bigger pack is never resized at all - the
+        /// game only calls SetInventorySize when the "invrows" key exists.
+        /// </summary>
+        [HarmonyPatch(typeof(InventoryGui), "SetInventorySize")]
+        [HarmonyPostfix]
+        private static void Taller(InventoryGui __instance) => Room(__instance);
+
+        private static void Room(InventoryGui gui)
+        {
+            RectTransform panel = gui.m_player;
+            if (panel == null)
+                return;
+            Vector2 size = panel.sizeDelta;
+            panel.sizeDelta = new Vector2(size.x, size.y + HotbarRow.RowShift);
         }
 
         private static void Register(string key, string label, RectTransform panel)
@@ -68,7 +94,13 @@ namespace CarturUIHud
         // Management, built on the first Show and hung off the weight box's own position with a
         // different anchor, which is what left them bunched together. One owner for the whole
         // column fixes it: same size, same backing, one even spacing, all four anchored the same
-        // way. Runs after the waste mod's own Show postfix so its two exist to be placed.
+        // way.
+        //
+        // Both mods postfix InventoryGui.Show and both write the same two GameObjects, so the
+        // order between them is now declared rather than assumed: [HarmonyAfter] on Column below
+        // puts this postfix after the waste mod's, and a soft BepInDependency on Plugin loads
+        // that mod first so its patch exists to be ordered against. Before those two the order
+        // was whatever the chainloader happened to give, and this comment claimed it as settled.
         private const float Margin = 6f;        // clear air either side of the column
         private const float BoxWidth = 80f;     // vanilla's armour and weight box width
         private const float MinBoxWidth = 44f;
@@ -81,15 +113,16 @@ namespace CarturUIHud
         private const string ColumnName = "CarturUI_SideColumn";
         private static readonly Color Gold = new Color32(255, 216, 0, 255);  // vanilla's armour number
 
-        // Top to bottom. The two Cartur names are built by the waste management mod on its own
-        // InventoryGui.Show postfix, which may run after this one, so the column is laid out
-        // again until all four have turned up rather than once and hoping.
+        // Top to bottom. The two Cartur names are built by the waste management mod; the column
+        // is laid out again until all four have turned up rather than once and hoping, which
+        // covers that mod being absent altogether as well as its pieces arriving late.
         private static readonly string[] ColumnNames = { "Armor", "CarturTrashCan", "CarturSortButton", "Weight" };
         private static int s_seated;
         private static bool s_registered;
 
         [HarmonyPatch(typeof(InventoryGui), "Show")]
         [HarmonyPostfix]
+        [HarmonyAfter("com.jekkle.valheim.carturwastemanagement")]
         private static void Column(InventoryGui __instance)
         {
             s_seated = 0;
@@ -186,20 +219,20 @@ namespace CarturUIHud
         /// resolution. Falls back to the room vanilla left for its two boxes.
         /// </summary>
         /// <summary>
-        /// True only when the gap is measured against something worth measuring: Equipment and
-        /// Quick Slots' armour cluster, or - when that mod is not installed - nothing at all, in
-        /// which case vanilla's own box width is the answer. False means "not yet", never "here
-        /// is a guess".
+        /// True only when the gap is measured against something worth measuring: the equipment
+        /// panel, or - before it has been built - nothing at all, in which case vanilla's own
+        /// box width is the answer. False means "not yet", never "here is a guess".
         ///
-        /// Those Head / Chest / Legs boxes are inventory grid CELLS, 64 units each, not a panel,
-        /// and the cluster's own rect is a sizeless container - so the edge comes from the
-        /// leftmost cell inside it.
+        /// This measured Equipment and Quick Slots' cluster until Part 12 made the slots ours;
+        /// the measurement is the same one, taken against our own panel now. Those Head / Chest
+        /// / Legs boxes are inventory grid CELLS, 64 units each, so the edge comes from the
+        /// leftmost cell inside the panel rather than from the panel's own rect.
         /// </summary>
         private static bool Measured(InventoryGui gui, RectTransform panel, out float gap)
         {
             gap = BoxWidth + Margin * 2f;
 
-            RectTransform slots = Descendant(panel, "EaqsSlotRoot");
+            RectTransform slots = Descendant(panel, EquipmentPanel.PanelName);
             if (slots == null)
                 return true;             // no cluster to clear; vanilla spacing stands
             if (!slots.gameObject.activeInHierarchy)
@@ -292,8 +325,11 @@ namespace CarturUIHud
                 box = (RectTransform)go.transform;
                 box.SetParent(parent, false);
 
+                // The thin rule, not the ornate panel: a 40-unit corner knot on a 64-unit box
+                // is all corner and no box. Cartur's call - the small panels take the border
+                // and leave the knotwork to the big ones.
                 Image frame = go.GetComponent<Image>();
-                frame.sprite = AssetLoader.Piece("panel", Ppu(parent));
+                frame.sprite = AssetLoader.Piece("panel_thin", Ppu(parent));
                 frame.type = Image.Type.Sliced;
                 frame.color = Color.white;
                 frame.raycastTarget = false;
@@ -335,6 +371,13 @@ namespace CarturUIHud
             float room = Mathf.Min((width - Padding) / Mathf.Max(size.x, 1f),
                                    (BoxHeight - Padding) / Mathf.Max(size.y, 1f));
             content.localScale = Vector3.one * Mathf.Min(1f, room);
+
+            // Waste Management turns its trash can or its sort button off when its own config
+            // says so, and it does that with SetActive rather than by destroying them. Descendant
+            // walks with includeInactive true, so a hidden piece is still found and still gets a
+            // box - and the box was left on, drawing as an empty framed gap in the column. The
+            // frame follows what it is wrapping.
+            box.gameObject.SetActive(content.gameObject.activeSelf);
         }
 
         /// <summary>

@@ -14,3 +14,7 @@ __pycache__/
 dist/
 package/plugins/
 tools/art/out/
+
+# Source video for the sleep screen. Hundreds of MB of generated .mp4 that git
+# would carry forever; kept on disk, out of history.
+src/Assets/sleep/

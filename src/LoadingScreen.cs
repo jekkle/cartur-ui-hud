@@ -85,12 +85,24 @@ namespace CarturUIHud
             float right = AssetLoader.FrameRightUnits * k;
             float rail = AssetLoader.FrameRailUnits * k;
 
+            // Centred on the SCREEN, at the height it already sat at. The parent has to be the
+            // canvas: LoadingIndicator's own rect is 180x208 anchored bottom-right, so a child
+            // centred inside it is still centred in that little box in the corner - which is
+            // exactly where the first attempt at centring left the bar.
+            //
+            // Moving the fill out of the indicator costs nothing: LateUpdate only writes its
+            // fillAmount and its colour, neither of which cares who the parent is.
+            //
+            // The window the fill shows through is not centred inside the frame - the knot is
+            // wider than the point - so the fill is nudged by half that difference, or a centred
+            // frame would hold an off-centre fill.
+            Transform host = HideRoot(__instance, canvas);
             var rt = (RectTransform)fill.transform;
-            rt.SetParent(__instance.transform, false);
-            rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);
-            rt.pivot = new Vector2(1f, 0f);
+            rt.SetParent(host != null ? host : __instance.transform, false);
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+            rt.pivot = new Vector2(0.5f, 0f);
             rt.sizeDelta = new Vector2(BarWidth - left - right, BarHeight - rail * 2f);
-            rt.anchoredPosition = new Vector2(-BarMargin - right, BarMargin + rail);
+            rt.anchoredPosition = new Vector2((left - right) * 0.5f, BarMargin + rail);
 
             fill.sprite = AssetLoader.BarFill;
             fill.type = Image.Type.Filled;
@@ -123,11 +135,13 @@ namespace CarturUIHud
             if (label != null)
             {
                 var trt = (RectTransform)label.transform;
-                trt.anchorMin = trt.anchorMax = new Vector2(1f, 0f);
-                trt.pivot = new Vector2(1f, 0f);
+                if (host != null)
+                    trt.SetParent(host, false);   // same reason as the bar
+                trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 0f);
+                trt.pivot = new Vector2(0.5f, 0f);
                 trt.sizeDelta = new Vector2(BarWidth, 28f);
-                trt.anchoredPosition = new Vector2(-BarMargin, BarMargin + BarHeight + 6f);
-                label.alignment = TextAlignmentOptions.Right;
+                trt.anchoredPosition = new Vector2(0f, BarMargin + BarHeight + 6f);
+                label.alignment = TextAlignmentOptions.Center;
             }
 
             // m_show is the master switch for the whole indicator and NOTHING in the game ever
@@ -136,6 +150,7 @@ namespace CarturUIHud
             // it decides on its own whether this screen can have a bar. Logged, not assumed.
             Log.LogInfo("loading bar dressed on " + Path(__instance.transform)
                 + (SceneLoaderIndicator() == __instance ? "  [SceneLoader's]" : string.Empty)
+                + "  host=" + (host != null ? host.name + " " + ((RectTransform)host).rect.size.ToString() : "none")
                 + "  m_show=" + (s_show?.GetValue(__instance))
                 + "  showProgress=" + (s_showProgress?.GetValue(__instance))
                 + "  fillAlpha=" + (s_progressOriginal?.GetValue(__instance) is Color c0 ? c0.a.ToString("0.##") : "?")
@@ -181,7 +196,7 @@ namespace CarturUIHud
             frt.anchorMax = fill.anchorMax;
             frt.pivot = fill.pivot;
             frt.sizeDelta = new Vector2(BarWidth, BarHeight);
-            frt.anchoredPosition = new Vector2(-BarMargin, BarMargin);
+            frt.anchoredPosition = new Vector2(0f, BarMargin);
             frt.SetAsLastSibling();          // the frame draws over the fill
 
             frame.sprite = AssetLoader.BarFrame;
@@ -191,6 +206,53 @@ namespace CarturUIHud
             // exactly where the fill was inset to - the two cannot drift apart.
             frame.pixelsPerUnitMultiplier = 1f / (BarHeight / AssetLoader.BaseBarHeight);
             s_frames[indicator] = frame;
+        }
+
+        /// <summary>
+        /// Where the bar is allowed to hang.
+        ///
+        /// It cannot stay under the indicator: that rect is 180x208 anchored bottom-right, so a
+        /// child centred in it is centred in the corner. But it cannot go all the way up to the
+        /// canvas either, which is what the first fix did and why the bar stayed on screen after
+        /// the load. Read off Hud.UpdateBlackScreen: the game hides this screen with
+        ///
+        ///     m_loadingScreen.alpha = ...;
+        ///     m_loadingScreen.gameObject.SetActive(false);
+        ///
+        /// - a CanvasGroup above the indicator. Anything parented above THAT gets neither the fade
+        /// nor the deactivate, and worse, once that object goes inactive the indicator stops
+        /// running LateUpdate, which is the only thing writing the fill's alpha. So the bar froze
+        /// at full alpha with nothing left alive to fade it.
+        ///
+        /// The nearest CanvasGroup above the indicator is therefore the host. That it is the SAME
+        /// CanvasGroup as m_loadingScreen, and that it is full screen so centring still means
+        /// centred, is not something the assembly can say - it is hierarchy. Both are printed in
+        /// the dressed line as host=name (w, h) rather than assumed here.
+        /// The startup indicator has no such group, and there the canvas is correct and the whole
+        /// scene is unloaded anyway.
+        /// </summary>
+        private static Transform HideRoot(LoadingIndicator indicator, Canvas canvas)
+        {
+            // The black screen is shared by three screens and the game picks which of them has
+            // a bar by switching one GameObject on and the other two off - Hud.UpdateBlackScreen
+            // sets m_loadingProgress, m_sleepingProgress and m_teleportingProgress one at a
+            // time. The CanvasGroup above all three was too high: our bar sat outside the switch
+            // and so it drew on the sleep screen and the teleport screen as well, where vanilla
+            // shows none. m_loadingProgress is public, full screen (anchors 0-1, no size of its
+            // own), and its rect is the canvas - so centring still means centred and the bar is
+            // now switched off with the screen it belongs to.
+            GameObject progress = Hud.instance != null ? Hud.instance.m_loadingProgress : null;
+            if (progress != null && indicator.transform.IsChildOf(progress.transform))
+                return progress.transform;
+
+            for (Transform t = indicator.transform.parent; t != null; t = t.parent)
+            {
+                if (t.GetComponent<CanvasGroup>() != null)
+                    return t;
+                if (t.GetComponent<Canvas>() != null)
+                    break;
+            }
+            return canvas != null ? canvas.transform : null;
         }
 
         /// <summary>
@@ -239,6 +301,20 @@ namespace CarturUIHud
             LoadingIndicator indicator = s_sceneLoaderIndicator?.GetValue(__instance) as LoadingIndicator;
             if (indicator == null)
                 return;
+
+            // Not over the opening videos. The intro cinematics play on this same screen, and
+            // a progress bar across them is just clutter - nothing is loading that the player
+            // is waiting on.
+            //
+            // IsStartedPlaying, not IsPlaying: the latter reads s_instance.m_videoPlayer with
+            // no null check of its own and throws before a cinematic has ever been set up.
+            // This one is a static bool and is safe whenever it is asked.
+            if (CinematicsManager.IsStartedPlaying())
+            {
+                if (indicator.IsVisible)
+                    indicator.SetShow(false);
+                return;
+            }
 
             if (!indicator.IsVisible)
                 indicator.SetShow(true);

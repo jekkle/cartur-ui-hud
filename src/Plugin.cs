@@ -14,11 +14,25 @@ namespace CarturUIHud
     // fight over the same objects every frame, so BepInEx refuses to load us next to them.
     [BepInIncompatibility("randyknapp.mods.auga")]
     [BepInIncompatibility("ZenDragon.AugaLite")]
+    // These two are now part of this mod rather than dependencies of it. Both grow the player's
+    // inventory into the same hidden rows and patch the same equip path, so side by side they
+    // would each move the other's items every frame. Remove them from the profile; a character
+    // that has been through them keeps every worn item exactly where it was, because the slot
+    // grid layout here is the one Equipment and Quick Slots used.
+    [BepInIncompatibility("randyknapp.mods.equipmentandquickslots")]
+    [BepInIncompatibility("vapok.mods.shieldmebruh")]
+    // Soft, so it changes nothing when Better Archery is absent - it is here purely for load
+    // order. QuiverCompat sets a field inside that mod, so that mod has to exist first.
+    [BepInDependency("ishid4.mods.betterarchery", BepInDependency.DependencyFlags.SoftDependency)]
+    // Also soft, also only load order. Cartur's Waste Management builds its trash can and sort
+    // button on its own InventoryGui.Show postfix, and InventoryScreen.Column re-seats those two
+    // into the side column - so it has to be patched first. See the [HarmonyAfter] on Column.
+    [BepInDependency("com.jekkle.valheim.carturwastemanagement", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
         public const string PluginName = "Carturs UI - HUD";
-        public const string PluginVersion = "1.0.2";
+        public const string PluginVersion = "1.0.4";
 
         private void Awake()
         {
@@ -29,8 +43,40 @@ namespace CarturUIHud
                 Skin.Log = Logger;
                 InventoryScreen.Log = Logger;
                 Hotbar.Log = Logger;
+                HotbarRow.Log = Logger;
+                LoadingArt.Log = Logger;
+                SleepVideo.Log = Logger;
+                Inlays.Log = Logger;
+                CookTimer.Log = Logger;
+                Tooltip.Log = Logger;
+                StyleTab.Log = Logger;
+#if DIAGNOSTICS
                 Dump.Log = Logger;
+                IconRender.Log = Logger;
+#endif
                 LoadingScreen.Log = Logger;
+                MapBorder.Log = Logger;
+                ShieldSlot.Log = Logger;
+                SlotPatches.Log = Logger;
+                EquipmentPanel.Log = Logger;
+                QuickSlots.Log = Logger;
+                AutoEquip.Log = Logger;
+                QuiverCompat.Log = Logger;
+
+                // One experiment, one switch, nothing destroyed: the generated wood panel is a
+                // separate PNG beside the built one, and turning this off goes straight back.
+                AssetLoader.WoodPanel = Config.Bind(
+                    "Art", "woodPanel", true,
+                    "Use the generated wood panel (panel_wood.png) for every menu panel. "
+                    + "Off returns to the panel built from the bar and diamond art.").Value;
+
+                // The panels are dim because vanilla's woodpanel Images carry the `litpanel`
+                // material - Custom/LitGui at _Brightness 0.37 - and swapping a sprite does not
+                // change that. On keeps it, off drops the material so our art draws at its real
+                // value. Default off, because the dimness is the complaint.
+                Skin.DarkMode = Config.Bind(
+                    "Art", "darkMode", false,
+                    "Keep vanilla's dimmed panel material (Custom/LitGui at 0.37 brightness). Off draws the panels at full brightness.").Value;
 
                 if (!AssetLoader.LoadTextures(Logger))
                 {
@@ -45,6 +91,28 @@ namespace CarturUIHud
                     + "Turn off when done - the layout is saved either way.");
                 HudLayout.Init(Config, editMode);
 
+                // The loading screen pictures in assets/loading.
+                LoadingArt.Init(Config);
+
+                // A video on the sleep screen, from assets/sleep.
+                SleepVideo.Init(Config);
+                Inlays.Init();
+
+                // Only what a Release build does not compile goes inside this guard. Three
+                // shipped features - LoadingArt, SleepVideo and Inlays - had their Init in here
+                // while harmony.PatchAll ran on them unconditionally below, so in Release they
+                // were patched and never set up, and each one silently did nothing. The rule:
+                // a type that is PatchAll'ed unconditionally has its setup out here too. Only
+                // Dump, Probe and IconRender belong inside - the csproj Compile-Removes those
+                // three files, so naming them at all is a compile error in Release.
+#if DIAGNOSTICS
+                // Development tools, Debug builds only - `dotnet build -c Debug`.
+                //
+                // They are not just config clutter: Dump and IconRender each hook Hud.Update,
+                // and Dump also hooks InventoryGui.Update. Those are per-frame
+                // patches, and a player's install should carry neither them nor a settings
+                // section named Debug.
+
                 // One launch with this on writes the vanilla UI hierarchy, sprite names and
                 // canvas scalers to the log, then turns itself off. It is how the skin table
                 // gets its names: from the game, not from memory.
@@ -52,15 +120,70 @@ namespace CarturUIHud
                     "Debug", "dumpOnce", false,
                     "Write the vanilla UI hierarchy to the BepInEx log on the next launch, then switch off.");
 
+                // Renders item icons from the prefabs. Dev tool, one-shot, off by default.
+                IconRender.Init(Config);
+#endif
+
+                // HudLayout.Init turns SaveOnConfigSet off - a drag writes every frame otherwise -
+                // so anything bound after it stays in memory and never reaches the file. One save
+                // here puts the sections on disk where they can be ticked.
+                Config.Save();
+
                 // A mod that throws during load takes the whole chainloader with it.
                 var harmony = new Harmony(PluginGuid);
                 harmony.PatchAll(typeof(HudSkin));
                 harmony.PatchAll(typeof(VanillaBars));
                 harmony.PatchAll(typeof(EditInputBlock));
                 harmony.PatchAll(typeof(Hotbar));
+                harmony.PatchAll(typeof(HotbarRow));
+                harmony.PatchAll(typeof(IconHoverPatch));
                 harmony.PatchAll(typeof(InventoryScreen));
                 harmony.PatchAll(typeof(LoadingScreen));
+                harmony.PatchAll(typeof(LoadingArt));
+                harmony.PatchAll(typeof(SleepVideo));
+                harmony.PatchAll(typeof(Inlays));
+                harmony.PatchAll(typeof(SettingsScreen));
+                harmony.PatchAll(typeof(PauseMenu));
+                harmony.PatchAll(typeof(BuildMenu));
+                harmony.PatchAll(typeof(ListScreens));
+                harmony.PatchAll(typeof(Screens));
+                harmony.PatchAll(typeof(Tooltip));
+                harmony.PatchAll(typeof(CookTimer));
+                harmony.PatchAll(typeof(StyleTab));
+#if DIAGNOSTICS
+                harmony.PatchAll(typeof(IconRender));
+#endif
+                harmony.PatchAll(typeof(MapBorder));
+
+                // The equipment, quick and shield slots. Patched last of the feature set so an
+                // earlier failure still leaves a working HUD.
+                QuickSlots.Init(Config);
+                AutoEquip.Init(Config);
+                // Better Archery, if it is here: trips its own inventory-expansion gate so it
+                // stands down, and points its quiver row at our slots.
+                QuiverCompat.Init();
+                // Named on its own line because BaseRowsPatch is nested inside QuiverCompat, and
+                // PatchAll(Type) reads AccessTools.GetDeclaredMethods on the type it is given -
+                // checked in the shipped 0Harmony, PatchTools.GetPatchMethods - so it never
+                // descends into a nested class. Its Prepare() no-ops when Better Archery is
+                // absent, so this costs nothing on an install without it.
+                harmony.PatchAll(typeof(QuiverCompat.BaseRowsPatch));
+                harmony.PatchAll(typeof(SlotPatches));
+                harmony.PatchAll(typeof(AutoEquip));
+                harmony.PatchAll(typeof(EquipmentPanel));
+                harmony.PatchAll(typeof(QuickSlots));
+                harmony.PatchAll(typeof(GamepadSlots));
+                harmony.PatchAll(typeof(ShieldSlot));
+                ShieldSlot.Init();
+                SlotPatches.CheckLookups();
+                if (!StyleTab.Found)
+                    Logger.LogWarning("Inventory.Changed not found - a style change will not refresh the icon");
+                if (!CookTimer.Found)
+                    Logger.LogWarning("CookingStation.m_nview not found - no cooking timers");
+
+#if DIAGNOSTICS
                 harmony.PatchAll(typeof(Dump));
+#endif
             }
             catch (Exception e)
             {

@@ -21,13 +21,11 @@ Client-side. No server install needed, works in multiplayer.
 - **Health, stamina, eitr and adrenaline bars** in a sliced bronze frame that keeps its
   ornaments crisp at any length. The knotwork fill is uncovered as the bar drains rather
   than squashed.
-- **Three food diamonds** with the countdown on each. With
-  [Equipment and Quick Slots](https://thunderstore.io/c/valheim/p/RandyKnapp/EquipmentAndQuickSlots/)
-  installed they show your quick slot items instead, and a slot holding something you are
+- **Three food diamonds** with the countdown on each. A slot holding something you are
   currently digesting still shows that food's timer.
 - **The guardian power** in its own frame, with the name and Ready/cooldown over the icon.
-- **Eitr and adrenaline share a row** — whichever pool you actually have is the one drawn.
-  Neither appears at all until you have one.
+- **Eitr and adrenaline get a row each** — neither is drawn until you have that pool,
+  and neither hides the other.
 
 Bars grow with your maximum, not just your current value: eat, and the bar itself gets
 longer; let the food run out and it shrinks back. Each bar reaches the same length at its
@@ -58,14 +56,31 @@ individual, so you can stack them how you like.
 
 ## Compatibility
 
-This mod takes over the vanilla health, stamina, eitr and adrenaline bars outright — it
-skips the game's own update for each of them and draws them itself. **It will fight any
-other mod that replaces those bars**, including Auga and AugaLite. Pick one.
+Four mods are declared incompatible in the plugin itself, so BepInEx will not start the
+game with this one and any of them in the same profile. It is not a load-order question —
+take the other one out:
 
-Everything else is left alone. It does not touch the inventory, the build menu, the map
-or the status effects, and mods that change those are unaffected.
+- **Auga** and **AugaLite** — they replace the same bars, panels and loading screen.
+- **[Equipment and Quick Slots](https://thunderstore.io/c/valheim/p/RandyKnapp/EquipmentAndQuickSlots/)**
+  and **Shield Me Bruh** — their equipment, quick and shield slots are part of this mod now.
+  A character that has been through Equipment and Quick Slots keeps every worn item exactly
+  where it was: the slot grid layout here is the one that mod used.
 
-Known good alongside: Equipment and Quick Slots, Epic Loot, BetterArchery, Jotunn.
+**BetterArchery** works alongside. This mod trips Better Archery's own inventory-expansion
+gate so it stands down, and hosts its quiver in three ammo cells of the equipment panel, so
+its arrow rules and quiver HUD keep working.
+
+**Cartur's Waste Management** works alongside too — its trash can and sort button are seated
+into the inventory's side column rather than left where they land.
+
+This is more than a HUD, so any other mod that redraws one of these will fight it: the four
+bars, the food and guardian-power boxes, the hotbar, the inventory, container, crafting and
+info panels, the equipment, quick and shield slots, item tooltips, the build menu, the
+skills and compendium screens, the settings and pause menus, the trader, chat and radial
+menus, and the loading and sleep screens. It also draws a frame around the minimap and the
+map — the map itself is left alone, the frame is one Image added beside it.
+
+Known good alongside: Epic Loot, Jotunn.
 
 ## Config
 
@@ -90,6 +105,7 @@ Deploys to the r2modman Default profile. Override with `-p:VALHEIM_INSTALL=...` 
 
 ```
 powershell -ExecutionPolicy Bypass -File tools\pack.ps1
-powershell -ExecutionPolicy Bypass -File toolseleasecheck.ps1
+powershell -ExecutionPolicy Bypass -File tools
+eleasecheck.ps1
 powershell -ExecutionPolicy Bypass -File tools\publish.ps1 -WhatIf
 ```

@@ -40,7 +40,14 @@ param(
     [string]$ModId,
 
     # Which of the mod's files this is a new version of. Matched on name.
-    [string]$FileName = "Cartur's UI - HUD"
+    # The page's file carries its version in its name, so this is the PREVIOUS release's
+    # name, not a fixed string.
+    [string]$FileName = "Cartur's UI - HUD",
+
+    # What the file is called after this upload. Nexus keeps the old file's name for a new
+    # version unless told otherwise, which would leave 1.0.3 sitting under a "1.0.2" label.
+    # Defaults to leaving the name alone.
+    [string]$NewName
 )
 
 $ErrorActionPreference = "Stop"
@@ -110,6 +117,7 @@ if (-not $target) {
 
 Write-Host "mod      : $($mod.data.name)  ($Game/$ModId -> $modUid)"
 Write-Host "file     : $($target.name)  ($($target.id))"
+if ($NewName) { Write-Host "renamed  : $NewName" }
 Write-Host "version  : $version"
 Write-Host "archive  : $($file.Name)  $([math]::Round($file.Length / 1KB)) KB"
 Write-Host "md5      : $md5"
@@ -154,16 +162,23 @@ Write-Host "state    : available"
 # --- 4. make it a new version of the main file -----------------------------------
 # update_mod_version and archive_existing_file are the two tick boxes on the form:
 # bump the mod's version to match, and move the previous file to the archive.
+#
+# primary_mod_manager_download is the third, and leaving it out is not neutral: the
+# schema defaults it to false, so the mod-manager download stays pointed at whatever
+# was primary before - the file this upload just archived. 1.0.3 shipped that way and
+# had to be fixed by hand on the site. There is no API to change it afterwards;
+# /mod-file-versions/{id} is GET only. It has to be set here or not at all.
 $created = Invoke-RestMethod -Method Post -Uri "$api/mod-files/$($target.id)/versions" -Headers $headers -Body (@{
-    upload_id             = $uploadId
-    name                  = $target.name
-    version               = $version
-    file_category         = "main"
-    update_mod_version    = $true
-    archive_existing_file = $true
+    upload_id                    = $uploadId
+    name                         = $(if ($NewName) { $NewName } else { $target.name })
+    version                      = $version
+    file_category                = "main"
+    update_mod_version           = $true
+    archive_existing_file        = $true
+    primary_mod_manager_download = $true
 } | ConvertTo-Json)
 
-Write-Host "published: $($target.name) $version"
+Write-Host "published: $(if ($NewName) { $NewName } else { $target.name }) $version"
 
 # --- 5. the changelog ------------------------------------------------------------
 # Additive on Nexus's side, so this runs last and only once per version.
