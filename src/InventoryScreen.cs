@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -86,7 +86,21 @@ namespace CarturUIHud
                 Log.LogWarning("no " + label + " panel - not registered");
                 return;
             }
-            HudLayout.Register(Owner, key, label, panel, panel, panel.anchoredPosition);
+            // Hit-test and outline against Bkg, not the panel - the same correction HudSkin
+            // already carries for the HUD bars. The panel is the window; Bkg is the ornate frame
+            // drawn around it, and it is bigger. Measured in game on all four, every one the same:
+            //
+            //     player  570x313 -> Bkg 590x333      crafting 570x650 -> Bkg 590x670
+            //     container 570x340 -> Bkg 590x360    info     570x130 -> Bkg 590x150
+            //
+            // Twenty wider and twenty taller, centred, so the frame stands 10 units proud on every
+            // side and an edit box on the panel sat that far inside what the player can see.
+            //
+            // Move stays the panel: Bkg is its child, so moving Bkg would slide the frame off its
+            // own contents.
+            RectTransform frame = panel.Find("Bkg") as RectTransform;
+            HudLayout.Register(Owner, key, label, panel, frame != null ? frame : panel,
+                               panel.anchoredPosition);
         }
 
         // The side column: armour, trash can, sort, weight. Armour and weight are vanilla's and
