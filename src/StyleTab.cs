@@ -4,6 +4,7 @@ using System.Text;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace CarturUIHud
@@ -48,12 +49,12 @@ namespace CarturUIHud
         private const string TabName = "CarturUI_StylesTab";
         private const string RowName = "CarturUI_StyleRow";
         private const string TabLabel = "STYLES";
-        private const float RowHeight = 48f;
         private const float CostShare = 0.1f;
 
         private static Button s_tab;
         private static bool s_active;
         private static readonly List<GameObject> s_rows = new List<GameObject>();
+        private static readonly List<ItemDrop.ItemData> s_rowItems = new List<ItemDrop.ItemData>();
         private static readonly HashSet<string> s_priced = new HashSet<string>();
 
         // What is selected in the list, and which style is being looked at. The style starts as
@@ -61,6 +62,7 @@ namespace CarturUIHud
         private static ItemDrop.ItemData s_selected;
         private static int s_variant;
         private static GameObject s_pane;
+        private static bool s_saidButton;   // the Change button is measured into the log once
 
         // Private on Inventory: setting m_variant changes nothing the UI watches, so the
         // inventory has to be told the item changed or the icon stays as it was.
@@ -82,6 +84,7 @@ namespace CarturUIHud
         {
             s_active = false;
             s_rows.Clear();
+            s_rowItems.Clear();
             s_tab = null;
 
             Button model = __instance.m_tabUpgrade;
@@ -293,6 +296,7 @@ namespace CarturUIHud
         {
             s_selected = item;
             s_variant = item != null ? item.m_variant : 0;
+            Mark();
             BuildPane(InventoryGui.instance);
         }
 
@@ -333,25 +337,45 @@ namespace CarturUIHud
             if (!s_active || gui.m_recipeListRoot == null)
                 return;
 
-            float y = 0f;
+            ItemDrop.ItemData first = null;
             foreach (Inventory where in Pool())
             {
                 foreach (ItemDrop.ItemData item in where.GetAllItems())
                 {
                     if (!HasStyles(item))
                         continue;
-                    s_rows.Add(Row(gui, item, y));
-                    y -= RowHeight;
+                    if (first == null)
+                        first = item;
+                    s_rows.Add(Row(gui, item, s_rows.Count));
+                    s_rowItems.Add(item);
                 }
             }
 
             if (s_rows.Count == 0)
                 Log.LogInfo("Styles: nothing carried that has more than one look");
+
+            // The top row is picked for you, so the tab opens on an item rather than on an
+            // empty pane. Select builds the pane itself; with nothing carried there is no row
+            // to pick and the art-only pane stands in.
+            if (first != null)
+                Select(first);
+            else
+                BuildPane(gui);
         }
 
         /// <summary>
-        /// A cape or a shield with more than one look. Those two because they are the only
-        /// places VisEquipment carries a variant - see the class note.
+        /// A cape, a shield, or a one-handed weapon with more than one look.
+        ///
+        /// The first two because they are the only places VisEquipment carries a variant - see
+        /// the class note. One-handed weapons are here for a different reason: the right hand
+        /// has no variant field at all, so nothing vanilla will change the model, but a mod can
+        /// swap the mesh on m_rightItemInstance after VisEquipment.SetRightHandEquipped attaches
+        /// it. Cartur's Weapon Styles does exactly that, and stores its choice in m_variant like
+        /// everything else here, so the pane and the pricing work unchanged.
+        ///
+        /// No vanilla one-handed weapon ships with m_variants > 1 - $item_sword_bronze has
+        /// m_variants = 0 and one icon, read from the game - so on an unmodded install this
+        /// line lists nothing new.
         /// </summary>
         private static bool HasStyles(ItemDrop.ItemData item)
         {
@@ -359,84 +383,111 @@ namespace CarturUIHud
             if (d == null || d.m_variants <= 1)
                 return false;
             return d.m_itemType == ItemDrop.ItemData.ItemType.Shoulder
-                || d.m_itemType == ItemDrop.ItemData.ItemType.Shield;
-        }
-
-        private static GameObject Row(InventoryGui gui, ItemDrop.ItemData item, float y)
-        {
-            var go = new GameObject(RowName, typeof(RectTransform), typeof(Image), typeof(Button));
-            var rt = (RectTransform)go.transform;
-            rt.SetParent(gui.m_recipeListRoot, false);
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.offsetMin = new Vector2(0f, 0f);
-            rt.offsetMax = new Vector2(0f, 0f);
-            rt.sizeDelta = new Vector2(0f, RowHeight - 4f);
-            rt.anchoredPosition = new Vector2(0f, y);
-
-            Canvas canvas = gui.GetComponentInParent<Canvas>();
-            float ppu = canvas != null ? canvas.referencePixelsPerUnit : 100f;
-            var plate = go.GetComponent<Image>();
-            plate.sprite = AssetLoader.Piece("button_thin", ppu);
-            plate.type = Image.Type.Sliced;
-            plate.color = Color.white;
-
-            // Two lines, not two columns. The list column is about 250 units wide and the cost
-            // of a shield runs to "3 Leather Scraps, 1 Wooden Protection Idol" - side by side
-            // the two labels landed on top of each other.
-            Icon(rt, item);
-            Label(rt, Localize(item.m_shared.m_name), -2f, 15f, 1f);
-            Label(rt, Cost(item), -24f, 12f, 0.65f);
-
-            ItemDrop.ItemData captured = item;
-            go.GetComponent<Button>().onClick.AddListener(() => Select(captured));
-            return go;
-        }
-
-        private static void Icon(RectTransform row, ItemDrop.ItemData item)
-        {
-            var go = new GameObject("icon", typeof(RectTransform), typeof(Image));
-            var rt = (RectTransform)go.transform;
-            rt.SetParent(row, false);
-            rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
-            rt.pivot = new Vector2(0f, 0.5f);
-            rt.sizeDelta = new Vector2(34f, 34f);
-            rt.anchoredPosition = new Vector2(8f, 0f);
-
-            var image = go.GetComponent<Image>();
-            image.sprite = item.GetIcon();
-            image.preserveAspect = true;
-            image.raycastTarget = false;
+                || d.m_itemType == ItemDrop.ItemData.ItemType.Shield
+                || d.m_itemType == ItemDrop.ItemData.ItemType.OneHandedWeapon
+                // Bows. A bow carries a real variant the way a shield does - Humanoid.EquipItem
+                // tests m_itemType against 4 (ItemType.Bow) at IL_050b and stores the item in
+                // m_leftItem at IL_052d - so the style travels in the ZDO and other players see
+                // it. Without this line the two Rotvein bow styles register fine and are simply
+                // never listed, which is exactly how they presented: the loader logged
+                // "BowFineWood style is variant 1 of 2" and the tab still showed nothing.
+                || d.m_itemType == ItemDrop.ItemData.ItemType.Bow;
         }
 
         /// <summary>
-        /// One line of a row: stretched across the row, inset past the icon on the left and off
-        /// the rule on the right, and never wrapped - a long cost is cut with an ellipsis
-        /// rather than pushed onto a second line and into the line below it.
+        /// Vanilla's own row, not a hand-built copy of one. The rows here used to be a plate, an
+        /// icon and two labels with their sizes written down, and they came out visibly smaller
+        /// than the Craft tab's beside them.
+        ///
+        /// InventoryGui.AddRecipeToList instantiates m_recipeElementPrefab into
+        /// m_recipeListRoot, spaces the rows by m_recipeListSpace, and fills them by finding
+        /// "icon", "name", "Durability", "QualityLevel" and "selected" inside by those names.
+        /// All of that is read off that method, and doing the same here means the row IS the
+        /// Craft tab's row - same plate, same icon size, same font, same spacing - with no
+        /// number in this file left to drift out of step with it. The prefab is also the one
+        /// this mod already skins, see InventoryScreen.
+        ///
+        /// Durability and QualityLevel are switched off: vanilla switches them on for the cases
+        /// that need them, so a fresh instance left alone shows whatever the prefab was saved
+        /// with rather than nothing.
         /// </summary>
-        private static void Label(RectTransform row, string text, float y, float size, float bright)
+        private static GameObject Row(InventoryGui gui, ItemDrop.ItemData item, int index)
         {
-            var go = new GameObject("text", typeof(RectTransform));
-            var rt = (RectTransform)go.transform;
-            rt.SetParent(row, false);
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            // Inset 48 on the left for the icon and 8 on the right: the width drops by both and
-            // the centre shifts by half their difference.
-            rt.sizeDelta = new Vector2(-56f, 20f);
-            rt.anchoredPosition = new Vector2(20f, y);
+            var go = Object.Instantiate(gui.m_recipeElementPrefab, gui.m_recipeListRoot);
+            go.name = RowName;              // Vanilla() leaves our rows alone by this name
+            go.SetActive(true);
 
-            var label = go.AddComponent<TextMeshProUGUI>();
-            label.font = InventoryGui.instance?.m_recipeName?.font;
-            label.fontSize = size;
-            label.alignment = TextAlignmentOptions.MidlineLeft;
-            label.textWrappingMode = TextWrappingModes.NoWrap;
-            label.overflowMode = TextOverflowModes.Ellipsis;
-            label.color = new Color(bright, bright, bright, 1f);
-            label.text = text;
-            label.raycastTarget = false;
+            var rt = (RectTransform)go.transform;
+            rt.anchoredPosition = new Vector2(0f, -index * gui.m_recipeListSpace);
+
+            var icon = go.transform.Find("icon")?.GetComponent<Image>();
+            if (icon != null)
+            {
+                icon.sprite = item.GetIcon();
+                icon.color = Color.white;
+            }
+
+            Off(go, "Durability");
+            Off(go, "QualityLevel");
+            Off(go, "selected");            // Mark switches the picked one back on
+
+            // The cost goes under the name as a second label cloned from the name itself, so it
+            // carries vanilla's own font and rect and sits at a fraction of vanilla's size
+            // rather than at a size chosen here. The two are pushed half a line apart.
+            var name = go.transform.Find("name")?.GetComponent<TMP_Text>();
+            if (name != null)
+            {
+                name.text = Localize(item.m_shared.m_name);
+                name.color = Color.white;
+                float line = name.fontSize;
+                var nameRt = (RectTransform)name.transform;
+
+                var cost = Object.Instantiate(name.gameObject, go.transform).GetComponent<TMP_Text>();
+                cost.name = "cost";
+                cost.fontSize = line * CostTextShare;
+                cost.color = new Color(0.65f, 0.65f, 0.65f, 1f);
+                cost.overflowMode = TextOverflowModes.Ellipsis;
+                cost.textWrappingMode = TextWrappingModes.NoWrap;
+                cost.text = Cost(item);
+
+                var costRt = (RectTransform)cost.transform;
+                costRt.anchorMin = nameRt.anchorMin;
+                costRt.anchorMax = nameRt.anchorMax;
+                costRt.pivot = nameRt.pivot;
+                costRt.sizeDelta = nameRt.sizeDelta;
+                costRt.anchoredPosition = nameRt.anchoredPosition - new Vector2(0f, line * 0.7f);
+                nameRt.anchoredPosition += new Vector2(0f, line * 0.35f);
+            }
+
+            ItemDrop.ItemData captured = item;
+            var button = go.GetComponent<Button>();
+            if (button != null)
+            {
+                button.onClick.RemoveAllListeners();   // the prefab's own recipe click
+                button.onClick.AddListener(() => Select(captured));
+            }
+            return go;
+        }
+
+        private static void Off(GameObject row, string child)
+        {
+            Transform t = row.transform.Find(child);
+            if (t != null)
+                t.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// The highlight is vanilla's own "selected" child - the same one SetRecipe switches on
+        /// for the Craft tab, so the picked row reads the same on all three.
+        /// </summary>
+        private static void Mark()
+        {
+            for (int i = 0; i < s_rows.Count; i++)
+            {
+                Transform t = s_rows[i] != null ? s_rows[i].transform.Find("selected") : null;
+                if (t != null)
+                    t.gameObject.SetActive(i < s_rowItems.Count && s_rowItems[i] == s_selected);
+            }
         }
 
         // ---- the pane ---------------------------------------------------------------------
@@ -460,7 +511,7 @@ namespace CarturUIHud
 
             Transform pane = gui != null ? Pane(gui) : null;
             ItemDrop.ItemData item = s_selected;
-            if (pane == null || item == null || item.m_shared == null || !s_active)
+            if (pane == null || !s_active)
                 return;
 
             Canvas canvas = gui.GetComponentInParent<Canvas>();
@@ -477,6 +528,16 @@ namespace CarturUIHud
             rt.sizeDelta = from.sizeDelta;
             rt.anchoredPosition = from.anchoredPosition;
 
+            // Nothing picked yet. The pane is still built, and carries only the serpent, so
+            // the tab opens with the art the crafting pane has instead of a bare hole. It is
+            // the same rect copied from the same vanilla pane, so it is the same size and in
+            // the same place as on Craft.
+            if (item == null || item.m_shared == null)
+            {
+                Inlays.Decorate(rt);
+                return;
+            }
+
             string missing;
             bool afford = CanPay(item, out missing);
             bool changed = s_variant != item.m_variant;
@@ -484,30 +545,56 @@ namespace CarturUIHud
             float width = from.rect.width;
             float height = from.rect.height;
 
+            // Every size below is the Craft tab's own, read off the very components the
+            // crafting pane draws with. They were written down here as 72, 24, 15 and 44 and
+            // came out smaller than the pane beside them; taken this way they cannot be wrong,
+            // and they follow the game or a skin if either changes them.
+            float nameSize = Size(gui.m_recipeName, 24f);
+            float bodySize = Size(gui.m_recipeDecription, 15f);
+            float iconSize = Side(gui.m_recipeIcon, 72f);
+            float buttonHeight = Side(gui.m_craftButton, 44f, tall: true);
+
+            // The style boxes are the inventory's own slot. InventoryGrid.UpdateGui places its
+            // elements at (x * m_elementSpace, y * -m_elementSpace) and instantiates
+            // m_elementPrefab at each spot, so the prefab's rect IS the box and m_elementSpace
+            // is the pitch - read off the live grid, not written down here. If the grid has
+            // gone, the pane falls back to the smaller boxes this file used to draw.
+            float box = Box(gui);
+            float pitch = gui.m_playerGrid != null && gui.m_playerGrid.m_elementSpace > box
+                ? gui.m_playerGrid.m_elementSpace : box + StyleGap;
+
+            float textLeft = Pad + iconSize + Pad;
+
             Sprite[] icons = item.m_shared.m_icons;
             Sprite preview = icons != null && s_variant >= 0 && s_variant < icons.Length
                 ? icons[s_variant] : item.GetIcon();
 
-            Picture(rt, preview, new Vector2(16f, -16f), 72f);
-            Text(rt, Localize(item.m_shared.m_name), new Vector2(100f, -20f), width - 116f, 30f,
-                24f, 1f, TextAlignmentOptions.TopLeft, Gold);
+            Picture(rt, preview, new Vector2(Pad, -Pad), iconSize);
+            Text(rt, Localize(item.m_shared.m_name), new Vector2(textLeft, -Pad),
+                width - textLeft - Pad, nameSize * 1.3f,
+                nameSize, 1f, TextAlignmentOptions.TopLeft, Gold);
 
             // Laid out from the BOTTOM up. The stats are as long as the item is complicated -
             // a shield with an enchantment runs past twenty lines - so the pieces under them
             // are placed first and the text is given exactly the room that is left. It is also
             // told to truncate: a long tooltip now stops, where before it ran straight through
             // the style buttons.
-            float buttonTop = 12f + ApplyHeight;
+            float costLine = bodySize * 1.6f;
+            float barHeight = BarHeight(gui);
+            float buttonTop = 12f + buttonHeight;
             float costY = buttonTop + 14f;
-            float stylesY = costY + 24f + 14f;
-            float headingY = stylesY + StyleBox + 6f;
-            float textBottom = headingY + 24f + 10f;
+            float barY = costY + costLine + 10f;
+            float stylesY = barY + barHeight + 6f;
+            float headingY = stylesY + box + 6f;
+            float textBottom = headingY + costLine + 10f;
 
-            Apply(rt, ppu, width, changed && afford);
-            Text(rt, Cost(item), new Vector2(16f, -(height - costY - 24f)), width - 32f, 24f, 16f, 1f,
+            Apply(gui, rt, changed && afford);
+            Text(rt, Cost(item), new Vector2(Pad, -(height - costY - costLine)), width - Pad * 2f,
+                costLine, bodySize, 1f,
                 TextAlignmentOptions.TopLeft, afford ? Color.white : Short);
-            Styles(rt, item, icons, ppu, -(height - stylesY - StyleBox), width);
-            Text(rt, StylesLabel, new Vector2(16f, -(height - headingY - 24f)), width - 32f, 24f, 18f, 1f,
+            Styles(gui, rt, item, icons, ppu, -(height - stylesY - box), width, box, pitch, barHeight);
+            Text(rt, StylesLabel, new Vector2(Pad, -(height - headingY - costLine)), width - Pad * 2f,
+                costLine, bodySize * 1.15f, 1f,
                 TextAlignmentOptions.TopLeft, Gold);
 
             // Vanilla's own builder, then vanilla's own localiser. GetTooltip hands back tokens
@@ -516,7 +603,9 @@ namespace CarturUIHud
             // the pane reads like a language file.
             string tooltip = Localize(
                 ItemDrop.ItemData.GetTooltip(item, item.m_quality, false, item.m_worldLevel, 1, false));
-            Text(rt, tooltip, new Vector2(16f, -104f), width - 32f, height - 104f - textBottom, 15f, 0.92f,
+            float textTop = Pad + iconSize + Pad;
+            Text(rt, tooltip, new Vector2(Pad, -textTop), width - Pad * 2f, height - textTop - textBottom,
+                bodySize, 0.92f,
                 TextAlignmentOptions.TopLeft, null, TextOverflowModes.Truncate);
 
             // Last, so it lands on top of everything this pane just drew.
@@ -531,14 +620,25 @@ namespace CarturUIHud
         /// A viewport with a RectMask2D and a ScrollRect, which is Unity's own machinery - the
         /// strip can be dragged or wheeled and is clamped at both ends. The buttons themselves
         /// are unchanged; they just live on the content rect now instead of on the pane.
+        ///
+        /// The style the item is WEARING is not in the strip. It is on the item already, it is
+        /// the picture at the top of the pane, and picking it is the one choice that can never
+        /// be paid for - Change returns early on it. So the strip is the alternatives only, and
+        /// the worn one comes back into it as soon as the item is wearing something else.
+        ///
+        /// Under the strip is a bar to drag, and it is vanilla's own - m_recipeListScroll, the
+        /// bar beside the recipe list on this very panel - cloned and laid on its side. Same
+        /// reason the Change button is a clone of the Craft button: the look is the game's, and
+        /// it follows a skin or a game update with nothing here to keep in step.
         /// </summary>
-        private static void Styles(RectTransform pane, ItemDrop.ItemData item, Sprite[] icons,
-            float ppu, float y, float width)
+        private static void Styles(InventoryGui gui, RectTransform pane, ItemDrop.ItemData item,
+            Sprite[] icons, float ppu, float y, float width, float box, float pitch, float barHeight)
         {
             if (icons == null)
                 return;
             int count = Mathf.Min(icons.Length, item.m_shared.m_variants);
-            if (count <= 0)
+            int offer = count - (item.m_variant >= 0 && item.m_variant < count ? 1 : 0);
+            if (offer <= 0)
                 return;
 
             var viewGo = new GameObject("styles", typeof(RectTransform), typeof(RectMask2D), typeof(ScrollRect));
@@ -546,7 +646,7 @@ namespace CarturUIHud
             view.SetParent(pane, false);
             view.anchorMin = view.anchorMax = new Vector2(0f, 1f);
             view.pivot = new Vector2(0f, 1f);
-            view.sizeDelta = new Vector2(width - 32f, StyleBox);
+            view.sizeDelta = new Vector2(width - 32f, box);
             view.anchoredPosition = new Vector2(16f, y);
 
             var contentGo = new GameObject("strip", typeof(RectTransform));
@@ -555,7 +655,7 @@ namespace CarturUIHud
             content.anchorMin = new Vector2(0f, 0f);
             content.anchorMax = new Vector2(0f, 1f);
             content.pivot = new Vector2(0f, 1f);
-            content.sizeDelta = new Vector2(count * (StyleBox + StyleGap), 0f);
+            content.sizeDelta = new Vector2(offer * pitch, 0f);
             content.anchoredPosition = Vector2.zero;
 
             var scroll = viewGo.GetComponent<ScrollRect>();
@@ -564,18 +664,29 @@ namespace CarturUIHud
             scroll.horizontal = true;
             scroll.vertical = false;
             scroll.movementType = ScrollRect.MovementType.Clamped;
-            scroll.scrollSensitivity = StyleBox;
+            // One notch of the wheel was one box, which is a long grind through a seven-style
+            // shield. Three boxes a notch, measured in the same pitch the boxes are placed at,
+            // so it stays three whole boxes whatever the grid's spacing is.
+            scroll.scrollSensitivity = pitch * WheelBoxes;
             scroll.inertia = false;
 
+            Wheel(pane, scroll);
+            Bar(gui, pane, scroll, view, content, width, y - box - 6f, barHeight);
+
+            int slot = 0;
             for (int i = 0; i < count; i++)
             {
+                if (i == item.m_variant)
+                    continue;
+
                 var go = new GameObject("style" + i, typeof(RectTransform), typeof(Image), typeof(Button));
                 var rt = (RectTransform)go.transform;
                 rt.SetParent(content, false);
                 rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
                 rt.pivot = new Vector2(0f, 1f);
-                rt.sizeDelta = new Vector2(StyleBox, StyleBox);
-                rt.anchoredPosition = new Vector2(i * (StyleBox + StyleGap), 0f);
+                rt.sizeDelta = new Vector2(box, box);
+                rt.anchoredPosition = new Vector2(slot * pitch, 0f);
+                slot++;
 
                 var plate = go.GetComponent<Image>();
                 plate.sprite = AssetLoader.Piece("slot", ppu);
@@ -583,7 +694,7 @@ namespace CarturUIHud
                 plate.fillCenter = false;
                 plate.color = i == s_variant ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f);
 
-                Picture(rt, icons[i], new Vector2(6f, -6f), StyleBox - 12f);
+                Picture(rt, icons[i], new Vector2(6f, -6f), box - 12f);
 
                 int pick = i;
                 go.GetComponent<Button>().onClick.AddListener(delegate
@@ -594,27 +705,208 @@ namespace CarturUIHud
             }
         }
 
-        private static void Apply(RectTransform pane, float ppu, float width, bool live)
+        /// <summary>
+        /// The wheel works over the whole pane, not only over the strip.
+        ///
+        /// Unity sends a scroll to the object under the cursor and then up its parents, and the
+        /// strip is one row of boxes - so over the stats, the cost or the button, which is most
+        /// of the pane, the wheel reached nothing and did nothing. This puts a handler on the
+        /// pane root, which IS a parent of everything drawn here, and a clear plate under it so
+        /// the empty parts of the pane are something the raycaster can hit at all.
+        ///
+        /// The handler hands the event straight to the ScrollRect rather than moving the strip
+        /// itself, so the speed and the clamping are the one set the ScrollRect already has and
+        /// there is no second number here to drift out of step. The cursor is not hit-tested by
+        /// hand: that was tried in HudLayout, worked here and not on other machines, and the
+        /// EventSystem does the job. See that file's note.
+        /// </summary>
+        private static void Wheel(RectTransform pane, ScrollRect scroll)
         {
-            var go = new GameObject("apply", typeof(RectTransform), typeof(Image), typeof(Button));
+            var plate = pane.GetComponent<Image>();
+            if (plate == null)
+            {
+                plate = pane.gameObject.AddComponent<Image>();
+                plate.color = new Color(0f, 0f, 0f, 0f);
+            }
+            plate.raycastTarget = true;
+
+            PaneWheel wheel = pane.GetComponent<PaneWheel>() ?? pane.gameObject.AddComponent<PaneWheel>();
+            wheel.Strip = scroll;
+        }
+
+        /// <summary>A scroll anywhere on the pane, given to the strip.</summary>
+        private sealed class PaneWheel : MonoBehaviour, IScrollHandler
+        {
+            internal ScrollRect Strip;
+
+            public void OnScroll(PointerEventData eventData)
+            {
+                if (Strip != null)
+                    ExecuteEvents.Execute(Strip.gameObject, eventData, ExecuteEvents.scrollHandler);
+            }
+        }
+
+        /// <summary>
+        /// Vanilla's scrollbar, cloned and laid on its side under the strip.
+        ///
+        /// Only when there is something to scroll. A bar whose handle fills it is a bar that
+        /// says the wrong thing - it looks draggable and does nothing - so with every style
+        /// already on screen there is no bar and the pane is that much shorter.
+        ///
+        /// The clone's own listeners go first: it arrives wired to the recipe list, and
+        /// ScrollRect.horizontalScrollbar adds the one that drives ours.
+        /// </summary>
+        private static void Bar(InventoryGui gui, RectTransform pane, ScrollRect scroll,
+            RectTransform view, RectTransform content, float width, float y, float barHeight)
+        {
+            Scrollbar model = gui != null ? gui.m_recipeListScroll : null;
+            if (model == null || content.sizeDelta.x <= view.sizeDelta.x)
+                return;
+
+            var go = Object.Instantiate(model.gameObject, pane);
+            go.name = "styles_scroll";
+            go.SetActive(true);
+
             var rt = (RectTransform)go.transform;
-            rt.SetParent(pane, false);
+            rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0f, 1f);
+            rt.sizeDelta = new Vector2(view.sizeDelta.x, barHeight);
+            rt.anchoredPosition = new Vector2(16f, y);
+
+            var bar = go.GetComponent<Scrollbar>();
+            if (bar == null)
+            {
+                Log.LogWarning("the recipe scrollbar has no Scrollbar on its root - no bar under the styles");
+                Object.Destroy(go);
+                return;
+            }
+            bar.onValueChanged.RemoveAllListeners();
+            bar.direction = Scrollbar.Direction.LeftToRight;
+            bar.value = 0f;
+            scroll.horizontalScrollbar = bar;
+        }
+
+        /// <summary>
+        /// The thickness of one of vanilla's own scrollbars, which is a standing bar's width and
+        /// a lying one's height. Off m_recipeListScroll, the bar beside the recipe list on this
+        /// same panel, so ours is as thick as the one next to it.
+        /// </summary>
+        private static float BarHeight(InventoryGui gui)
+        {
+            var rt = gui != null && gui.m_recipeListScroll != null
+                ? gui.m_recipeListScroll.transform as RectTransform : null;
+            float v = rt != null ? rt.rect.width : 0f;
+            return v > 1f ? v : BarFallback;
+        }
+
+        /// <summary>
+        /// The Craft button itself, cloned.
+        ///
+        /// This used to be a plate of our own - a sprite out of the bundle for live, a second
+        /// one for dead, and our two colours on the label. It never matched, because vanilla
+        /// does not draw a second button for "cannot craft": InventoryGui.UpdateRecipe only
+        /// ever sets m_craftButton.interactable, and the look of both states lives on the
+        /// prefab - its Selectable ColorBlock, its transition, its label. Read off the DLL,
+        /// not guessed.
+        ///
+        /// So the button is vanilla's, copied. Setting interactable on the copy gives the
+        /// enabled and disabled look the Craft tab has, for free, and it follows a skin or a
+        /// game update the same way vanilla's does.
+        /// </summary>
+        private static void Apply(InventoryGui gui, RectTransform pane, bool live)
+        {
+            Button model = gui != null ? gui.m_craftButton : null;
+            if (model == null)
+            {
+                Log.LogWarning("no craft button to copy - no Change style button on this pane");
+                return;
+            }
+
+            var go = Object.Instantiate(model.gameObject, pane);
+            go.name = "apply";
+            go.SetActive(true);
+
+            // The height comes off the MODEL, not off the clone. It used to be read from the
+            // clone's own rect on the line that set it - after its anchors had just been
+            // changed to the bottom edge. rect.height is sizeDelta.y once a rect stops
+            // stretching vertically, and vanilla's button does stretch, so the number read back
+            // was the stretched rect's inset and not a height at all: a button of no height,
+            // which is a pane with no Change button on it.
+            var modelRect = (RectTransform)model.transform;
+            float height = modelRect.rect.height;
+
+            var rt = (RectTransform)go.transform;
             rt.anchorMin = new Vector2(0f, 0f);
             rt.anchorMax = new Vector2(1f, 0f);
             rt.pivot = new Vector2(0.5f, 0f);
-            rt.sizeDelta = new Vector2(-32f, ApplyHeight);
+            rt.sizeDelta = new Vector2(-Pad * 2f, height);
             rt.anchoredPosition = new Vector2(0f, 12f);
 
-            var plate = go.GetComponent<Image>();
-            plate.sprite = AssetLoader.Piece(live ? "button_thin" : "button_thin_disabled", ppu);
-            plate.type = Image.Type.Sliced;
+            // Temporary. The button went missing and this says which of the two it was - a
+            // height of nothing, or a button placed off the pane - in one look at the log
+            // rather than one more guess. Once. Delete when it has been read.
+            if (s_saidButton == false)
+            {
+                s_saidButton = true;
+                Log.LogInfo("style button: model rect " + modelRect.rect.width + "x" + modelRect.rect.height
+                    + " anchors " + modelRect.anchorMin + "-" + modelRect.anchorMax
+                    + " sizeDelta " + modelRect.sizeDelta
+                    + " | clone " + rt.rect.width + "x" + rt.rect.height + " at " + rt.anchoredPosition
+                    + " on a pane " + pane.rect.width + "x" + pane.rect.height);
+            }
 
-            Text(rt, ChangeLabel, Vector2.zero, width - 48f, ApplyHeight, 20f, 1f,
-                TextAlignmentOptions.Center, live ? Gold : Short);
+            foreach (TMP_Text label in go.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (label != null)
+                    label.text = ChangeLabel;
+            }
+
+            // The clone brings the craft button's hover text with it, which would say the wrong
+            // thing over ours.
+            var tip = go.GetComponent<UITooltip>();
+            if (tip != null)
+                tip.m_text = "";
 
             var button = go.GetComponent<Button>();
-            button.interactable = live;
+            if (button == null)
+            {
+                Log.LogWarning("the craft button has no Button on its root - no Change style button");
+                return;
+            }
+            button.onClick.RemoveAllListeners();
             button.onClick.AddListener(Change);
+            button.interactable = live;
+        }
+
+        /// <summary>
+        /// A font size off one of vanilla's own labels, or the number this file used to carry
+        /// if the field has gone. Null-checked because a member found today can vanish in a
+        /// game update, and a pane drawn a little wrong beats a pane that throws.
+        /// </summary>
+        private static float Size(TMP_Text text, float fallback) =>
+            text != null && text.fontSize > 0f ? text.fontSize : fallback;
+
+        /// <summary>
+        /// The side of one inventory slot, off the grid's own element prefab. The fallback is
+        /// the smaller box this pane drew before, so a missing grid costs a look, not a pane.
+        /// </summary>
+        private static float Box(InventoryGui gui)
+        {
+            GameObject prefab = gui != null && gui.m_playerGrid != null
+                ? gui.m_playerGrid.m_elementPrefab : null;
+            var rt = prefab != null ? prefab.transform as RectTransform : null;
+            float v = rt != null ? Mathf.Max(rt.rect.width, rt.rect.height) : 0f;
+            return v > 1f ? v : StyleBox;
+        }
+
+        /// <summary>The height, or for a square thing the side, of one of vanilla's own rects.</summary>
+        private static float Side(Component c, float fallback, bool tall = false)
+        {
+            var rt = c != null ? c.transform as RectTransform : null;
+            if (rt == null)
+                return fallback;
+            float v = tall ? rt.rect.height : Mathf.Max(rt.rect.width, rt.rect.height);
+            return v > 1f ? v : fallback;
         }
 
         private static void Picture(RectTransform parent, Sprite sprite, Vector2 at, float size)
@@ -659,7 +951,10 @@ namespace CarturUIHud
 
         private const float StyleBox = 52f;
         private const float StyleGap = 6f;
-        private const float ApplyHeight = 44f;
+        private const float WheelBoxes = 3f;    // boxes moved per notch of the wheel
+        private const float BarFallback = 12f;  // only if m_recipeListScroll has gone
+        private const float CostTextShare = 0.72f;
+        private const float Pad = 16f;
         private const string StylesLabel = "Styles";
         private const string ChangeLabel = "Change style";
         private static readonly Color Gold = new Color(1f, 0.79f, 0.29f, 1f);
@@ -925,6 +1220,7 @@ namespace CarturUIHud
                     Object.Destroy(row);
             }
             s_rows.Clear();
+            s_rowItems.Clear();
 
             if (s_pane != null)
                 Object.Destroy(s_pane);
