@@ -323,6 +323,15 @@ namespace CarturUIHud
         /// places something once on the player's behalf (the inventory board under the hotbar).
         /// </summary>
         /// <summary>True the first time it is asked for a key, ever; remembered in the config.</summary>
+        /// <summary>The on-screen rect of a registered piece (what edit mode outlines), or null.</summary>
+        internal static RectTransform HitOf(string key)
+        {
+            foreach (Element e in s_elements)
+                if (e.Key == key && e.Hit != null)
+                    return e.Hit;
+            return null;
+        }
+
         public static bool FirstTime(string key)
         {
             var entry = s_config.Bind("Layout migrations", key, false,

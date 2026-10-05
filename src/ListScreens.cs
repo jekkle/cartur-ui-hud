@@ -1,4 +1,5 @@
 using HarmonyLib;
+using UnityEngine;
 
 namespace CarturUIHud
 {
@@ -28,6 +29,22 @@ namespace CarturUIHud
         {
             Skin.Apply(__instance.transform, "skills");
             Skin.Apply(__instance.m_elementPrefab?.transform, "skills row prefab");
+            Smaller(__instance.m_elementPrefab);
+        }
+
+        /// <summary>
+        /// The skill names drew about twice the size of every other Cartur panel's text (both panel
+        /// reviews, 2026-10-05). Measured on the row prefab: name is TMP 16 with auto-size up to 25,
+        /// so it grows to 25; description auto 1-16, level and bonus a fixed 16. Auto-size is capped
+        /// at 16, which leaves everything else as it was. Idempotent, so a second Awake changes nothing.
+        /// </summary>
+        private static void Smaller(GameObject row)
+        {
+            if (row == null)
+                return;
+            foreach (TMPro.TMP_Text t in row.GetComponentsInChildren<TMPro.TMP_Text>(true))
+                if (t.enableAutoSizing && t.fontSizeMax > 16f)
+                    t.fontSizeMax = 16f;
         }
 
         [HarmonyPatch(typeof(TextsDialog), "Awake")]

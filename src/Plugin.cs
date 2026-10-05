@@ -157,64 +157,52 @@ namespace CarturUIHud
                 // here puts the sections on disk where they can be ticked.
                 Config.Save();
 
-                // A mod that throws during load takes the whole chainloader with it.
+                // A mod that throws during load takes the whole chainloader with it, so every
+                // patch group is guarded on its own: one target renamed by a game update leaves
+                // that one part vanilla instead of skipping everything after it. SlotPatches is
+                // what keeps Humanoid.DropInvalidItems off the hidden equipment/quick/shield rows;
+                // inside one try it was skipped whenever any of the ~25 cosmetic groups before it
+                // threw, and a character's worn kit dropped on the floor at login (Fable review,
+                // 2026-10-05). The order is unchanged - postfixes on a shared method (InventoryGui.
+                // Show) run in patch order, and the layout depends on it.
                 var harmony = new Harmony(PluginGuid);
-                harmony.PatchAll(typeof(HudSkin));
-                harmony.PatchAll(typeof(VanillaBars));
-                harmony.PatchAll(typeof(EditInputBlock));
-                harmony.PatchAll(typeof(Hotbar));
-                harmony.PatchAll(typeof(HotbarRow));
-                harmony.PatchAll(typeof(IconHoverPatch));
-                harmony.PatchAll(typeof(InventoryScreen));
-                harmony.PatchAll(typeof(CraftingBoard));
-                harmony.PatchAll(typeof(ChestBoard));
-                harmony.PatchAll(typeof(HoverFx));
-                harmony.PatchAll(typeof(StoreBoard));
-                harmony.PatchAll(typeof(MenuBoards));
-                harmony.PatchAll(typeof(LoadingScreen));
-                harmony.PatchAll(typeof(LoadingArt));
-                harmony.PatchAll(typeof(SleepVideo));
-                harmony.PatchAll(typeof(Inlays));
-                harmony.PatchAll(typeof(SettingsScreen));
-                harmony.PatchAll(typeof(PauseMenu));
-                harmony.PatchAll(typeof(BuildMenu));
-                harmony.PatchAll(typeof(ListScreens));
-                harmony.PatchAll(typeof(Screens));
-                harmony.PatchAll(typeof(Tooltip));
-                harmony.PatchAll(typeof(CookTimer));
-                harmony.PatchAll(typeof(StyleTab));
-                harmony.PatchAll(typeof(Welcome));
-                // EpicLoot's enchanting table, if it is installed. Hand-patched rather than
-                // PatchAll'ed, because the type it hooks is in a mod this one does not reference.
-                EnchantingScreen.Init(harmony);
-                // Jotunn's failed-connection window, same pattern: soft dependency, private method.
-                JotunnWindows.Init(harmony);
+                foreach (Type t in new[] { typeof(HudSkin), typeof(VanillaBars), typeof(EditInputBlock),
+                                           typeof(Hotbar), typeof(HotbarRow), typeof(IconHoverPatch),
+                                           typeof(InventoryScreen), typeof(CraftingBoard), typeof(ChestBoard),
+                                           typeof(HoverFx), typeof(StoreBoard), typeof(MenuBoards),
+                                           typeof(LoadingScreen), typeof(LoadingArt), typeof(SleepVideo),
+                                           typeof(Inlays), typeof(SettingsScreen), typeof(PauseMenu),
+                                           typeof(BuildMenu), typeof(ListScreens), typeof(Screens),
+                                           typeof(Tooltip), typeof(CookTimer), typeof(StyleTab),
+                                           typeof(Welcome) })
+                    Guard(t.Name, () => harmony.PatchAll(t));
+                // EpicLoot's enchanting table and Jotunn's failed-connection window, if those mods
+                // are installed: hand-patched, because the types are in mods this one does not reference.
+                Guard("EnchantingScreen", () => EnchantingScreen.Init(harmony));
+                Guard("JotunnWindows", () => JotunnWindows.Init(harmony));
 #if DIAGNOSTICS
-                harmony.PatchAll(typeof(IconRender));
+                Guard("IconRender", () => harmony.PatchAll(typeof(IconRender)));
 #endif
-                harmony.PatchAll(typeof(MapBorder));
+                Guard("MapBorder", () => harmony.PatchAll(typeof(MapBorder)));
 
-                // The equipment, quick and shield slots. Patched last of the feature set so an
-                // earlier failure still leaves a working HUD.
-                QuickSlots.Init(Config);
-                AutoEquip.Init(Config);
-                // Better Archery, if it is here: trips its own inventory-expansion gate so it
-                // stands down, and points its quiver row at our slots.
-                QuiverCompat.Init();
-                // Named on its own line because BaseRowsPatch is nested inside QuiverCompat, and
-                // PatchAll(Type) reads AccessTools.GetDeclaredMethods on the type it is given -
-                // checked in the shipped 0Harmony, PatchTools.GetPatchMethods - so it never
-                // descends into a nested class. Its Prepare() no-ops when Better Archery is
-                // absent, so this costs nothing on an install without it.
-                harmony.PatchAll(typeof(QuiverCompat.BaseRowsPatch));
-                harmony.PatchAll(typeof(SlotPatches));
-                harmony.PatchAll(typeof(AutoEquip));
-                harmony.PatchAll(typeof(EquipmentPanel));
-                harmony.PatchAll(typeof(CharacterPreview));
-                harmony.PatchAll(typeof(QuickSlots));
-                harmony.PatchAll(typeof(GamepadSlots));
-                harmony.PatchAll(typeof(ShieldSlot));
-                ShieldSlot.Init();
+                // The equipment, quick and shield slots.
+                Guard("slot system", () =>
+                {
+                    QuickSlots.Init(Config);
+                    AutoEquip.Init(Config);
+                    // Better Archery, if it is here: trips its own inventory-expansion gate so it
+                    // stands down, and points its quiver row at our slots.
+                    QuiverCompat.Init();
+                });
+                // BaseRowsPatch is nested inside QuiverCompat, and PatchAll(Type) reads
+                // AccessTools.GetDeclaredMethods on the type it is given - checked in the shipped
+                // 0Harmony, PatchTools.GetPatchMethods - so it never descends into a nested class.
+                // Its Prepare() no-ops when Better Archery is absent.
+                foreach (Type t in new[] { typeof(QuiverCompat.BaseRowsPatch), typeof(SlotPatches), typeof(AutoEquip),
+                                           typeof(EquipmentPanel), typeof(CharacterPreview), typeof(QuickSlots),
+                                           typeof(GamepadSlots), typeof(ShieldSlot) })
+                    Guard(t.Name, () => harmony.PatchAll(t));
+                Guard("ShieldSlot.Init", ShieldSlot.Init);
                 SlotPatches.CheckLookups();
                 if (!StyleTab.Found)
                     Logger.LogWarning("Inventory.Changed not found - a style change will not refresh the icon");
@@ -229,6 +217,12 @@ namespace CarturUIHud
             {
                 Logger.LogWarning("patch failed, HUD left vanilla: " + e);
             }
+        }
+
+        private void Guard(string part, Action patch)
+        {
+            try { patch(); }
+            catch (Exception e) { Logger.LogWarning(part + " not patched, that part left vanilla: " + e); }
         }
     }
 }

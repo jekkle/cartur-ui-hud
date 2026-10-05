@@ -74,6 +74,8 @@ namespace CarturUIHud
                 title.color = Gold;
             }
 
+            ClearHud(store, board);
+
             // The sell slot (drop an item, click the coin) kept the old frame's spot and floated off
             // the board (Cartur, 2026-10-04). Docked to the board's right edge, level with Buy, on the
             // slot-rim plate the other buttons use.
@@ -93,6 +95,43 @@ namespace CarturUIHud
                 }
             }
         }
+
+        /// <summary>
+        /// The window ran down over the health bar (pilot shot + both panel reviews, 2026-10-05). When
+        /// it overlaps the health bar - the top bar - it is scaled and moved, as one, into the space
+        /// between the hotbar board and that bar, read from where the player has them now, so it
+        /// follows their own layout. Reset to the game's own size and spot first on every open, so it
+        /// never compounds.
+        /// </summary>
+        private static void ClearHud(Transform store, RectTransform board)
+        {
+            var rt = store as RectTransform;
+            if (rt == null)
+                return;
+            if (!s_rest.HasValue)
+                s_rest = (rt.localScale, rt.anchoredPosition);
+            rt.localScale = s_rest.Value.scale;
+            rt.anchoredPosition = s_rest.Value.pos;
+
+            RectTransform hp = HudLayout.HitOf("health"), bar = Hotbar.BoardRect;
+            if (hp == null || bar == null || !hp.gameObject.activeInHierarchy)
+                return;
+            Rect h = World(hp), t = World(bar), w = World(board);
+            bool overlaps = w.xMin < h.xMax && w.xMax > h.xMin && w.yMin < h.yMax;
+            if (!overlaps)
+                return;
+            float gap = w.height * 0.01f;
+            float lo = h.yMax + gap;
+            float hi = (t.xMin < w.xMax && t.xMax > w.xMin) ? Mathf.Min(t.yMin - gap, w.yMax) : w.yMax;
+            if (hi - lo < w.height * 0.5f)
+                return;          // no sensible room: leave it as the game placed it
+            float k = Mathf.Min(1f, (hi - lo) / w.height);
+            rt.localScale = s_rest.Value.scale * k;
+            w = World(board);
+            rt.position += new Vector3(0f, lo - w.yMin, 0f);
+        }
+
+        private static (Vector3 scale, Vector2 pos)? s_rest;
 
         /// <summary>
         /// Epic Loot builds its trader panel after the store opens, so it is put on its board from the

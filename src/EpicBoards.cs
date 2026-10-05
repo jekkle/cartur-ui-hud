@@ -89,6 +89,10 @@ namespace CarturUIHud
         /// on; frame = the knotwork rectangle in board px, measured off each cut PNG (rows and
         /// columns over 90% opaque), the medallions overhanging it.
         ///
+        /// Since tools/art/enchant_unify.py (2026-10-05) every board carries the Sacrifice board's
+        /// frame, medallions and tab column - only the window interior differs - so all seven share
+        /// its frame and tab rims and the window no longer jumps sideways between tabs.
+        ///
         /// tabs = the painted tab boxes' left and right rims, in the dump's screen px (panel
         /// 533.33..2026.67 at 2560 wide). Grok painted the column slightly differently on each board,
         /// so it is per board: measured off each PNG through its frame, and on the six boards a pilot
@@ -98,12 +102,12 @@ namespace CarturUIHud
             new Dictionary<string, (string, RectInt, float, float)>
             {
                 ["SacrificeContent"] = ("enchant_sacrifice", new RectInt(4, 24, 1665, 1043), 573, 723),
-                ["ConvertContent"] = ("enchant_convert", new RectInt(1, 26, 1666, 1040), 577, 734),
-                ["EnchantContent"] = ("enchant_enchant", new RectInt(2, 26, 1664, 1045), 577, 757),
-                ["AugmentContent"] = ("enchant_augment", new RectInt(1, 26, 1666, 1042), 582, 746),
-                ["DisenchantContent"] = ("enchant_disenchant", new RectInt(1, 26, 1666, 1039), 577, 735),
-                ["RuneContent"] = ("enchant_rune", new RectInt(4, 27, 1666, 1040), 579, 742),
-                ["UpgradeContent"] = ("enchant_upgrade", new RectInt(2, 26, 1665, 1040), 576, 737),
+                ["ConvertContent"] = ("enchant_convert", new RectInt(4, 24, 1665, 1043), 573, 723),
+                ["EnchantContent"] = ("enchant_enchant", new RectInt(4, 24, 1665, 1043), 573, 723),
+                ["AugmentContent"] = ("enchant_augment", new RectInt(4, 24, 1665, 1043), 573, 723),
+                ["DisenchantContent"] = ("enchant_disenchant", new RectInt(4, 24, 1665, 1043), 573, 723),
+                ["RuneContent"] = ("enchant_rune", new RectInt(4, 24, 1665, 1043), 573, 723),
+                ["UpgradeContent"] = ("enchant_upgrade", new RectInt(4, 24, 1665, 1043), 573, 723),
             };
 
         /// <summary>
@@ -166,6 +170,7 @@ namespace CarturUIHud
                 Back(panel, b.board, b.frame);
                 CentreTabs(panel, b.tabL, b.tabR);
                 ClearKnots(tab);
+                BodyFonts(panel);
                 return;
             }
         }
@@ -209,6 +214,35 @@ namespace CarturUIHud
                 label.position += rt.TransformVector(new Vector3((left + right) * 0.5f - centre, 0f, 0f));
             }
         }
+
+        /// <summary>
+        /// Text size across the seven tabs (both panel reviews, 2026-10-05: the Disenchant description
+        /// drew at about three times the size of its neighbours). Epic Loot's legacy UI.Text uses
+        /// best-fit; it may no longer grow a label past 16, or past its own size if that is larger -
+        /// the Disenchant description is set to 14 and drew at about 28, while the size-8 button and
+        /// row labels rely on best-fit to reach a readable size. Fonts are left as Epic Loot set them:
+        /// copying the "Sort By:" font turned its serif row names into Averia Sans (logged, pilot
+        /// 2026-10-05). TMP text takes the game's recipe-description font, the one StyleTab uses -
+        /// measured as Valheim-AveriaSansLibre, the same family.
+        /// </summary>
+        private static void BodyFonts(Transform panel)
+        {
+            foreach (Text t in panel.GetComponentsInChildren<Text>(true))
+            {
+                if (t.fontSize >= 24)
+                    continue;
+                int cap = Mathf.Max(t.fontSize, 16);
+                if (t.resizeTextForBestFit && t.resizeTextMaxSize > cap)
+                    t.resizeTextMaxSize = cap;
+            }
+            TMPro.TMP_FontAsset body = InventoryGui.instance != null && InventoryGui.instance.m_recipeDecription != null
+                ? InventoryGui.instance.m_recipeDecription.font : null;
+            if (body != null)
+                foreach (TMPro.TMP_Text t in panel.GetComponentsInChildren<TMPro.TMP_Text>(true))
+                    if (t.font != body)
+                        t.font = body;
+        }
+
 
         private static string s_tab;
 

@@ -60,6 +60,9 @@ namespace CarturUIHud
         private static int s_frames, s_starved;
         private static bool s_labelled;
         private static bool s_readerDone;
+        // Set on stand-down: the reader stops instead of parking in Monitor.Wait for good with up
+        // to ReadAhead bytes still queued (Fable review, 2026-10-05).
+        private static bool s_abort;
         private static Exception s_readerError;
         private static readonly List<string> s_made = new List<string>();
 
@@ -170,6 +173,7 @@ namespace CarturUIHud
                 FileStream fs = null;
                 foreach (Item it in items)
                 {
+                    if (s_abort) break;
                     if (fs == null || fs.Name != it.File) { fs?.Dispose(); fs = File.OpenRead(it.File); }
                     var data = new byte[it.Length];
                     fs.Position = it.Offset;
@@ -181,7 +185,8 @@ namespace CarturUIHud
                     }
                     lock (s_ready)
                     {
-                        while (s_queuedBytes > ReadAhead) Monitor.Wait(s_ready);
+                        while (s_queuedBytes > ReadAhead && !s_abort) Monitor.Wait(s_ready);
+                        if (s_abort) break;
                         s_ready.Enqueue((it, data));
                         s_queuedBytes += data.Length;
                     }
@@ -267,6 +272,13 @@ namespace CarturUIHud
                 if (s_textures.TryGetValue(name, out Texture2D t)) { UnityEngine.Object.Destroy(t); s_textures.Remove(name); }
             s_made.Clear();
             s_running = false;
+            lock (s_ready)
+            {
+                s_abort = true;
+                s_ready.Clear();
+                s_queuedBytes = 0;
+                Monitor.PulseAll(s_ready);
+            }
         }
 
         /// <summary>

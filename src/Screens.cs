@@ -35,6 +35,20 @@ namespace CarturUIHud
     /// </summary>
     internal static class Screens
     {
+        /// <summary>
+        /// ZInput.GetBoundKeyString returns the literal 'MISSING BUTTON DEF "name"' for a button it has
+        /// no definition for, unless the caller asked for an empty string (read off assembly_valheim
+        /// 1.0.16). The pilot dump found it on six gamepad hints (craft tabs, repair, select variant,
+        /// store buy/sell); a hint with no known button now shows nothing instead of the raw string.
+        /// </summary>
+        [HarmonyPatch(typeof(ZInput), nameof(ZInput.GetBoundKeyString))]
+        [HarmonyPostfix]
+        private static void NoMissingDef(ref string __result)
+        {
+            if (__result != null && __result.StartsWith("MISSING BUTTON DEF"))
+                __result = "";
+        }
+
         [HarmonyPatch(typeof(StoreGui), "Awake")]
         [HarmonyPostfix]
         private static void Store(StoreGui __instance)

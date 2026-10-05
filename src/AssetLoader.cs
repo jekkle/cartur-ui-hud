@@ -382,7 +382,10 @@ namespace CarturUIHud
                 return null;
             }
 
-            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false)
+            // With mips (Fable review, 2026-10-05): the boards are 1000-2000 px and draw 2-4x
+            // smaller at 1080p or a low GUI scale, and without mips the knotwork shimmers.
+            // LoadImage keeps the mip setting the texture was made with.
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, true)
             {
                 wrapMode = TextureWrapMode.Clamp,
                 filterMode = FilterMode.Bilinear
@@ -444,7 +447,7 @@ namespace CarturUIHud
             if (!changed)
                 return;
             tex.SetPixels32(px);
-            tex.Apply(false);
+            tex.Apply(true);   // rebuild the mips from the corrected pixels
         }
 
         /// <summary>
@@ -466,7 +469,7 @@ namespace CarturUIHud
                 px[i] = new Color32((byte)(c.r * 0.742f), (byte)(c.g * 0.685f), (byte)(c.b * 0.562f), c.a);
             }
             tex.SetPixels32(px);
-            tex.Apply(false);
+            tex.Apply(true);   // rebuild the mips from the corrected pixels
         }
 
         private static bool LoadImageViaReflection(Texture2D tex, byte[] data)
