@@ -260,7 +260,7 @@ namespace CarturUIHud
         private static readonly string[] s_boardNames =
             { "inventory", "hotbar", "equipment", "crafting", "wide", "tall", "small", "banner", "button",
               "mainmenu", "charselect", "world", "serverlist", "eula", "newworld", "modifiers", "namepanel", "custom",
-              "window", "window_base", "craftingfull", "grid", "grid_base", "grid_band", "grid_wood", "store", "adventure", "enchant",
+              "window", "window_base", "craftingfull", "grid", "grid_base", "grid_band", "grid_wood", "store", "adventure",
               "enchant_sacrifice", "enchant_convert", "enchant_enchant", "enchant_augment", "enchant_disenchant",
               "enchant_rune", "enchant_upgrade",
               "slider_track", "slider_fill", "slider_knob",

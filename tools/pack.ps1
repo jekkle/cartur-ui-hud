@@ -32,10 +32,27 @@ $modDir = Join-Path $pkg "plugins\CarturUIHud"
 if (Test-Path (Join-Path $pkg "plugins")) { Remove-Item (Join-Path $pkg "plugins") -Recurse -Force }
 New-Item -ItemType Directory -Force -Path (Join-Path $modDir "assets") | Out-Null
 Copy-Item (Join-Path $root "src\bin\Release\net472\CarturUIHud.dll") $modDir -Force
-Copy-Item (Join-Path $root "src\Assets\*.png") (Join-Path $modDir "assets") -Force
+# Board art the code no longer loads stays out (AssetLoader.s_boardNames is the list it loads):
+# the per-size chest boards and the thin boards were replaced by GridBoard, and the single
+# enchanting board by one per tab. ~22 MB.
+$unused = "board_chest.png", "board_chest_[0-9]*x*.png", "board_thin*.png", "board_enchant.png"   # not board_chest_icon_*: those are used
+Get-ChildItem (Join-Path $root "src\Assets") -Filter *.png -File |
+    Where-Object { $n = $_.Name; -not ($unused | Where-Object { $n -like $_ }) } |
+    Copy-Item -Destination (Join-Path $modDir "assets") -Force
+# The same three art folders the csproj deploys beside the DLL (LoadingArt, SleepVideo,
+# Inlays read them). Packing only the loose PNGs shipped a release with no loading art, no
+# sleep screen and no ship inlay (release review, 2026-10-05). Retired card art stays out.
+foreach ($sub in "loading", "sleep", "inlays") {
+    $from = Join-Path $root "src\Assets\$sub"
+    if (-not (Test-Path $from)) { throw "src\Assets\$sub is missing - LoadingArt/SleepVideo/Inlays would ship empty" }
+    $to = Join-Path $modDir "assets\$sub"
+    New-Item -ItemType Directory -Force -Path $to | Out-Null
+    Get-ChildItem $from -File | Copy-Item -Destination $to -Force
+}
 
-$shipped = Get-ChildItem (Join-Path $modDir "assets") -File
-Write-Host "assets: $($shipped.Count) - $($shipped.Name -join ', ')"
+$shipped = Get-ChildItem (Join-Path $modDir "assets") -File -Recurse
+$mb = [math]::Round(($shipped | Measure-Object Length -Sum).Sum / 1MB, 1)
+Write-Host "assets: $($shipped.Count) files, $mb MB"
 
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 $zip = Join-Path $dist "$($manifest.name)-$version.zip"
