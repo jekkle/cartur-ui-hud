@@ -68,11 +68,8 @@ namespace CarturUIHud
                 return;
             foreach (UnityEngine.Transform row in __instance.m_listRoot)
                 foreach (UnityEngine.UI.Image img in row.GetComponentsInChildren<UnityEngine.UI.Image>(true))
-                    if (img.name == "selected")
-                    {
-                        img.sprite = null;
-                        img.color = CraftingBoard.Selection;
-                    }
+                    if (img.name == "selected" && img.color != CraftingBoard.Rim)
+                        CraftingBoard.Bronze(img);
         }
     }
 }

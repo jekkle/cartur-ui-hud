@@ -76,12 +76,11 @@ namespace CarturUIHud
                     continue;
                 if (img.name == "Background" && img.color.a > 0f)
                     img.color = Color.clear;
-                else if (img.name == "Selected" && img.color != Selection)
-                    img.color = Selection;
+                else if (img.name == "Selected" && img.color != CraftingBoard.Rim)
+                    CraftingBoard.Bronze(img);
             }
         }
 
-        private static readonly Color Selection = new Color(1f, 0.8f, 0.35f, 0.45f);
 
         /// <summary>
         /// One board per tab layout (2026-10-05, Grok renders from enchant_guides.py, which drew each

@@ -277,9 +277,7 @@ namespace CarturUIHud
                                 crt.anchorMax = Vector2.one;
                                 crt.offsetMin = crt.offsetMax = Vector2.zero;
                             }
-                        var sel = prefab.Find("selected")?.GetComponent<Image>();
-                        if (sel != null)
-                            sel.color = new Color(1f, 0.8f, 0.35f, 0.45f);   // the world list's soft gold
+                        Bronze(prefab.Find("selected")?.GetComponent<Image>());
                     }
                     var bkg = prefab != null ? prefab.Find("bkg")?.GetComponent<Image>() : null;
                     if (bkg != null)
@@ -343,18 +341,52 @@ namespace CarturUIHud
                 sel.anchorMax = Vector2.one;
                 sel.offsetMin = new Vector2(RowRimPx * k, RowRimPx * k);
                 sel.offsetMax = new Vector2(-RowRimPx * k, -RowRimPx * k);
-                // A see-through gold so the light item name stays readable on it - drawn opaque, the
-                // name vanished into it (review, 2026-10-04).
                 if (sel.GetComponent<Image>() is Image glow)
-                {
-                    glow.sprite = null;
-                    glow.color = Selection;
-                }
+                    Bronze(glow);
             }
         }
 
         private const float RowRimPx = 5f;
-        internal static readonly Color Selection = new Color(1f, 0.78f, 0.3f, 0.28f);
+
+        /// <summary>
+        /// The selected row: a bronze rim (slot_selected, the art the selected inventory slot uses) and
+        /// a faint bronze wash under it, in place of the flat see-through gold block both panel reviews
+        /// flagged (Cartur, 2026-10-05: "bronze highlight"). The name stays readable - the wash is
+        /// lighter than the old gold. Used by the recipe list, the compendium and Epic Loot's lists.
+        /// </summary>
+        internal static void Bronze(Image img)
+        {
+            if (img == null)
+                return;
+            Canvas c = img.canvas;
+            Sprite rim = AssetLoader.Piece("slot_selected", c != null ? c.referencePixelsPerUnit : 100f);
+            if (rim == null)
+            {
+                img.sprite = null;
+                img.color = Wash;
+                return;
+            }
+            img.sprite = rim;
+            img.type = Image.Type.Sliced;
+            img.fillCenter = false;
+            img.color = Rim;
+            if (img.transform.Find(WashName) == null)
+            {
+                var go = new GameObject(WashName, typeof(RectTransform), typeof(Image));
+                var rt = (RectTransform)go.transform;
+                rt.SetParent(img.transform, false);
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.offsetMin = rt.offsetMax = Vector2.zero;
+                var w = go.GetComponent<Image>();
+                w.color = Wash;
+                w.raycastTarget = false;
+            }
+        }
+
+        private const string WashName = "CarturUI_BronzeWash";
+        internal static readonly Color Rim = new Color(0.86f, 0.6f, 0.36f, 1f);
+        private static readonly Color Wash = new Color(0.72f, 0.45f, 0.22f, 0.16f);
 
         /// <summary>
         /// The station name fills its part of the title bar rather than being scaled down with
