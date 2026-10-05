@@ -87,6 +87,23 @@ namespace CarturUIHud
 
         public static bool Editing => s_editing;
 
+        /// <summary>
+        /// Cartur's layout, copied from his [Layout] section on 2026-10-05: the default for every
+        /// piece listed. Same format as the config. A piece not listed keeps its code default -
+        /// the four bars stay where the published 1.0.5 put them (his call, same day).
+        /// </summary>
+        private static readonly Dictionary<string, string> Shipped = new Dictionary<string, string>
+        {
+            ["player"] = "61.75,-184,0.748,1,1,0,0",
+            ["container"] = "0,-30,1,1,1,0,0",
+            ["crafting"] = "-37,-164.75,0.779,1,1,0,0",
+            ["info"] = "-41.5,-39.25,0.769,1,1,0,0",
+            ["cluster"] = "90.95,143.6,0.9,1,1,0,0",
+            ["hotbar"] = "79.25,-47,0.722,1,1,0,0",
+            ["equipment"] = "111.99,237.23,0.891,1,1,0,0",
+            ["sidecolumn"] = "73.17,15.87,1.036,1,1,0,0",
+        };
+
         private static ConfigEntry<bool> s_reset;
         private static ConfigEntry<bool> s_saveDefault;
 
@@ -194,6 +211,23 @@ namespace CarturUIHud
             if (move == null || hit == null)
                 return;
 
+            // Cartur's own layout is the default (2026-10-05: "the positions the ui is in on my
+            // screen should be the default"). The caller's value is still the rest position the
+            // Animator pin works from; only where a piece starts out, and where a reset puts it,
+            // comes from the table. A player whose saved entry is exactly the old default never
+            // moved that piece, so it follows the new one; any other saved entry is theirs and is
+            // left alone.
+            Vector2 rest = fallbackPosition;
+            string oldDefault = Format(fallbackPosition, fallbackScale, fallbackLength, fallbackFrameScale, Vector2.zero);
+            if (Shipped.TryGetValue(key, out string shipped)
+                && TryParse(shipped, out Vector2 sp, out float ss, out float sl, out float sf, out Vector2 _))
+            {
+                fallbackPosition = sp;
+                fallbackScale = ss;
+                fallbackLength = sl;
+                fallbackFrameScale = sf;
+            }
+
             var element = new Element
             {
                 Owner = owner,
@@ -225,6 +259,14 @@ namespace CarturUIHud
                 element.HomeFrameScale = homeFrame;
             }
 
+            string newDefault = Format(fallbackPosition, fallbackScale, fallbackLength, fallbackFrameScale, Vector2.zero);
+            if (element.Entry.Value == oldDefault && oldDefault != newDefault)
+            {
+                element.Entry.Value = newDefault;
+                Persist();
+                Log.LogInfo("moved " + key + " from the old default to the new one");
+            }
+
             if (!TryParse(element.Entry.Value, out Vector2 position, out float scale, out float length, out float frameScale, out Vector2 frameOff))
             {
                 position = fallbackPosition;
@@ -251,11 +293,11 @@ namespace CarturUIHud
             element.Length = Mathf.Clamp(length, MinScale, MaxScale);
             element.FrameScale = Mathf.Clamp(frameScale, MinScale, MaxScale);
             element.FrameOffset = frameOff;
-            element.Rest = fallbackPosition;
+            element.Rest = rest;
             if (move.GetComponentInParent<Animator>() != null)
                 element.Pin = move.gameObject.GetComponent<Pin>() ?? move.gameObject.AddComponent<Pin>();
             if (element.Pin != null)
-                element.Pin.Rest = fallbackPosition;
+                element.Pin.Rest = rest;
             SetPos(element, position);
             Apply(element);
 

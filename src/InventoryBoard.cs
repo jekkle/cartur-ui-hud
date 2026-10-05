@@ -129,6 +129,11 @@ namespace CarturUIHud
                 // still overriding the panel (fixed with HudLayout.Pin, 2026-10-03).
                 if (panel == null || !HudLayout.FirstTime("bagUnderHotbar2"))
                     return;
+                // Only off the old dev default. Cartur's own layout now ships as the default
+                // (HudLayout.Shipped, 2026-10-05), and a fresh install aligned here would lose it on
+                // the first open; the published mod never had a bag panel, so no player needs this.
+                if ((panel.anchoredPosition - OldDefault).sqrMagnitude > 1f)
+                    return;
                 Align(s_gui, s_first, s_second, scale: false);
                 HudLayout.Commit("player");
                 HotbarRow.Log?.LogInfo("inventory board moved from the old default to under the hotbar: " + panel.anchoredPosition);
