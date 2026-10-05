@@ -34,6 +34,8 @@ namespace CarturUIHud
     // Soft, load order only: HDLoader reads HD Valheim Textures' TextureReplacer, which that mod
     // builds in its own Awake.
     [BepInDependency(HDLoader.HdGuid, BepInDependency.DependencyFlags.SoftDependency)]
+    // Soft, load order only: JotunnWindows looks Jotunn's ModCompatibility up by name.
+    [BepInDependency("com.jotunn.jotunn", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
@@ -66,6 +68,7 @@ namespace CarturUIHud
                 Tooltip.Log = Logger;
                 StyleTab.Log = Logger;
                 EnchantingScreen.Log = Logger;
+                JotunnWindows.Log = Logger;
 #if DIAGNOSTICS
                 Dump.Log = Logger;
                 IconRender.Log = Logger;
@@ -184,6 +187,8 @@ namespace CarturUIHud
                 // EpicLoot's enchanting table, if it is installed. Hand-patched rather than
                 // PatchAll'ed, because the type it hooks is in a mod this one does not reference.
                 EnchantingScreen.Init(harmony);
+                // Jotunn's failed-connection window, same pattern: soft dependency, private method.
+                JotunnWindows.Init(harmony);
 #if DIAGNOSTICS
                 harmony.PatchAll(typeof(IconRender));
 #endif

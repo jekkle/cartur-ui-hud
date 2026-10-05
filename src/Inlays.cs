@@ -104,6 +104,78 @@ namespace CarturUIHud
             rt.position = new Vector3(b[2].x - s_shipRight * k, b[0].y + s_shipBottom * k, rt.position.z);
         }
 
+        /// <summary>
+        /// The ship behind the icons but over the slots (Cartur, 2026-10-05). The panel-level image
+        /// sits under PlayerGrid, so it shows in the gaps; the slot backgrounds are opaque and hid
+        /// the rest. One image cannot sit above 24 slot backgrounds and below 24 icons, so each slot
+        /// the ship crosses gets its own slice of it, inserted just before that slot's m_icon and
+        /// sized to the slot's background (m_button.targetGraphic) - the slices line up with the
+        /// gap ship, and nothing is drawn twice. No canvases and no raycast targets, so clicks,
+        /// drags and tooltips are untouched. Re-done per frame from the grid's own UpdateGui because
+        /// the grid rebuilds its elements whenever the bag changes size.
+        /// </summary>
+        [HarmonyPatch(typeof(InventoryGrid), "UpdateGui")]
+        [HarmonyPostfix]
+        private static void SlicesUnderIcons(InventoryGrid __instance, List<InventoryElement> ___m_elements)
+        {
+            if (InventoryGui.instance == null || __instance != InventoryGui.instance.m_playerGrid || ___m_elements == null)
+                return;
+            Image ship = s_ship?.First;
+            if (ship == null || ship.sprite == null || !ship.isActiveAndEnabled)
+                return;
+
+            // The ship as drawn: preserveAspect fits the texture, centred, inside its rect.
+            ship.rectTransform.GetWorldCorners(s_corners);
+            float w = s_corners[2].x - s_corners[0].x, h = s_corners[2].y - s_corners[0].y;
+            float aspect = ship.sprite.rect.width / ship.sprite.rect.height;
+            float dw = Mathf.Min(w, h * aspect), dh = dw / aspect;
+            if (dw <= 0f || dh <= 0f)
+                return;
+            var drawn = new Rect(s_corners[0].x + (w - dw) * 0.5f, s_corners[0].y + (h - dh) * 0.5f, dw, dh);
+
+            foreach (InventoryElement e in ___m_elements)
+            {
+                if (e == null || e.m_icon == null)
+                    continue;
+                Graphic slot = e.m_button != null ? e.m_button.targetGraphic : null;
+                RectTransform under = slot != null ? slot.rectTransform : (RectTransform)e.transform;
+                under.GetWorldCorners(s_corners);
+                var r = Rect.MinMaxRect(s_corners[0].x, s_corners[0].y, s_corners[2].x, s_corners[2].y);
+
+                Transform t = e.m_icon.transform.parent.Find(SliceName);
+                RawImage slice = t != null ? t.GetComponent<RawImage>() : null;
+                if (!r.Overlaps(drawn))
+                {
+                    if (slice != null) slice.enabled = false;
+                    continue;
+                }
+                if (slice == null)
+                {
+                    var go = new GameObject(SliceName, typeof(RectTransform), typeof(RawImage));
+                    go.transform.SetParent(e.m_icon.transform.parent, false);
+                    go.transform.SetSiblingIndex(e.m_icon.transform.GetSiblingIndex());
+                    slice = go.GetComponent<RawImage>();
+                    slice.raycastTarget = false;
+                    slice.texture = ship.sprite.texture;
+                    ship.sprite.texture.wrapMode = TextureWrapMode.Clamp;
+                }
+                slice.enabled = true;
+                slice.color = ship.color;
+                var srt = slice.rectTransform;
+                srt.anchorMin = srt.anchorMax = srt.pivot = new Vector2(0.5f, 0.5f);
+                Vector3 k = srt.parent.lossyScale;
+                if (k.x <= 0f || k.y <= 0f)
+                    continue;
+                srt.sizeDelta = new Vector2(r.width / k.x, r.height / k.y);
+                srt.position = new Vector3(r.center.x, r.center.y, srt.position.z);
+                slice.uvRect = new Rect((r.x - drawn.x) / drawn.width, (r.y - drawn.y) / drawn.height,
+                                        r.width / drawn.width, r.height / drawn.height);
+            }
+        }
+
+        private const string SliceName = "CarturUIHud_InlaySlice";
+        private static readonly Vector3[] s_corners = new Vector3[4];
+
         private static bool s_shipPinned;
         private static float s_shipRight, s_shipBottom;
         private static Vector2 s_shipSize;
@@ -165,11 +237,16 @@ namespace CarturUIHud
                 var rt = (RectTransform)go.transform;
                 rt.SetParent(panel, false);
 
-                // Last sibling, not first. First put it behind the panel's own full-size
-                // background child, which drew over it and showed nothing at all. It carries no
-                // raycast, so drawing on top costs nothing: a click still reaches the slot
-                // underneath.
-                rt.SetAsLastSibling();
+                // Just in front of the item grid: over the panel's own background ("Bkg", "sunken"),
+                // under the icons (Cartur, 2026-10-05: render behind the icons). Logged order of
+                // the player panel: ..., Bkg, sunken, help_Text, PlayerGrid, TooltipAnchor,
+                // Container. First sibling showed nothing - the full-size background drew over it;
+                // last sibling drew it over the icons. A panel with no PlayerGrid keeps last.
+                Transform grid = panel.Find("PlayerGrid");
+                if (grid != null)
+                    rt.SetSiblingIndex(grid.GetSiblingIndex());
+                else
+                    rt.SetAsLastSibling();
 
                 var image = go.GetComponent<Image>();
                 image.sprite = Sprite.Create(_tex, new Rect(0, 0, _tex.width, _tex.height),

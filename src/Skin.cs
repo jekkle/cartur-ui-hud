@@ -209,9 +209,14 @@ namespace CarturUIHud
             Log.LogInfo(label + ": " + images + " images, " + states + " button states skinned");
         }
 
+        private static string BaseName(string name) =>
+            name.EndsWith("(Clone)") ? name.Substring(0, name.Length - 7).TrimEnd() : name;
+
         private static bool Swap(Image img)
         {
-            if (img.sprite == null || !s_table.TryGetValue(img.sprite.name, out Entry e))
+            // A copied sprite keeps the vanilla name plus "(Clone)" - Jotunn's GUIManager hands out
+            // copies ("woodpanel_trophys(Clone)", pilot dump 2026-10-05), so its windows matched nothing.
+            if (img.sprite == null || !s_table.TryGetValue(BaseName(img.sprite.name), out Entry e))
             {
                 if (img.sprite != null && !img.sprite.name.StartsWith("cartur_") && s_unmatched.Add(img.sprite.name))
                     Log.LogInfo("no skin for sprite '" + img.sprite.name + "' (" + img.name + ")");
@@ -584,7 +589,7 @@ namespace CarturUIHud
 
         private static Sprite Lookup(Sprite vanilla, ref bool any)
         {
-            if (vanilla == null || !s_table.TryGetValue(vanilla.name, out Entry e))
+            if (vanilla == null || !s_table.TryGetValue(BaseName(vanilla.name), out Entry e))
                 return vanilla;
             Sprite ours = Piece(e);
             if (ours == null)

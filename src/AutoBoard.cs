@@ -50,7 +50,7 @@ namespace CarturUIHud
         private Image _board;
         private Vector2 _size;
         private int _next;
-        private bool _covered;
+        private bool _covered, _keptLogged;
 
         internal static void Attach(Image plate)
         {
@@ -108,10 +108,24 @@ namespace CarturUIHud
             Canvas canvas = _plate.canvas;
             var root = canvas != null ? canvas.rootCanvas.transform as RectTransform : null;
             Rect mine = WorldRect(_plate.rectTransform);
-            bool fullScreen = root != null && mine.width >= WorldRect(root).width * 0.9f
-                                           && mine.height >= WorldRect(root).height * 0.9f;
+            // The root canvas's rect is the screen, except where a mod's canvas reports nonsense:
+            // Jotunn's CustomGUIFront measured -50x-50 (pilot, 2026-10-05), so every window on it
+            // counted as full screen. A rect with no size falls back to the screen itself.
+            Rect screen = root != null ? WorldRect(root) : default;
+            if (screen.width <= 1f || screen.height <= 1f)
+                screen = new Rect(0f, 0f, Screen.width, Screen.height);
+            bool fullScreen = mine.width >= screen.width * 0.9f && mine.height >= screen.height * 0.9f;
             if (fullScreen || aspect > MaxAspect || aspect < 1f / MaxAspect || Mathf.Min(_size.x, _size.y) < MinSide)
             {
+                // Once per frame object: the inputs that kept it on the old art. Jotunn's failed-
+                // connection window (1000x600) was kept with no word as to why (pilot, 2026-10-05).
+                if (!_keptLogged)
+                {
+                    _keptLogged = true;
+                    Log.LogInfo($"window kept on old art: {Path(transform)} {_size.x:0}x{_size.y:0} aspect {aspect:0.##}"
+                        + $" fullScreen {fullScreen} (mine {mine.width:0}x{mine.height:0}, root "
+                        + $"{screen.width:0}x{screen.height:0}" + (root != null ? $" '{root.name}'" : "") + ")");
+                }
                 Keep();
                 return;
             }
