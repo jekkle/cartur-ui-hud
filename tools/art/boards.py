@@ -40,7 +40,9 @@ NAMES = ["inventory", "hotbar", "equipment", "crafting", "wide", "tall", "small"
          # enchant_guides.py, upscaled 2x (upscale.py). Picks: sacrifice 1, convert 2, enchant 2,
          # augment 3, disenchant 2, rune 2 (re-rendered without the hidden filter field), upgrade 1.
          "enchant_sacrifice", "enchant_convert", "enchant_enchant", "enchant_augment",
-         "enchant_disenchant", "enchant_rune", "enchant_upgrade"]
+         "enchant_disenchant", "enchant_rune", "enchant_upgrade",
+         # 2026-10-05: the build menu (BuildUIV2), Grok render from build_guide.py, option 2, 2x.
+         "build"]
 
 # Light enough to be background, if it is joined to the edge. Measured: every border is >= 252.
 BG_LUM = 235

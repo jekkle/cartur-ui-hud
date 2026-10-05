@@ -262,7 +262,7 @@ namespace CarturUIHud
               "mainmenu", "charselect", "world", "serverlist", "eula", "newworld", "modifiers", "namepanel", "custom",
               "window", "window_base", "craftingfull", "grid", "grid_base", "grid_band", "grid_wood", "store", "adventure",
               "enchant_sacrifice", "enchant_convert", "enchant_enchant", "enchant_augment", "enchant_disenchant",
-              "enchant_rune", "enchant_upgrade",
+              "enchant_rune", "enchant_upgrade", "build",
               "slider_track", "slider_fill", "slider_knob",
               "chest_icon_take", "chest_icon_stack", "chest_icon_sort", "chest_icon_sortall" };
 

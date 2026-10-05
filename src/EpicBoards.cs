@@ -273,7 +273,7 @@ namespace CarturUIHud
         }
 
         /// <summary>The board behind <paramref name="panel"/>, its frame over the panel's rect; the panel's own art off.</summary>
-        private static bool Back(RectTransform panel, string board, RectInt frame)
+        internal static bool Back(RectTransform panel, string board, RectInt frame)
         {
             Texture2D tex = AssetLoader.Board(board);
             if (tex == null || panel.rect.width <= 0f)
