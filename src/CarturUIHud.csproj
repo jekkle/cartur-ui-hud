@@ -48,6 +48,11 @@
       <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\assembly_utils.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- The game's own post stack (PostProcessing v1), for the character preview's grading. -->
+    <Reference Include="assembly_postprocessing">
+      <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\assembly_postprocessing.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine">
       <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\UnityEngine.dll</HintPath>
       <Private>false</Private>

@@ -11,9 +11,11 @@ namespace CarturUIHud
     /// Part 12 of Cartur's UI: the quick slot hotkeys. Replaces the quick slot half of
     /// Equipment and Quick Slots.
     ///
-    /// The three food diamonds on the HUD are the quick slots - the real cells, not a picture
-    /// of them. See Host below for how, and for why that is a dozen lines rather than a
-    /// hundred. There is no quick slot row in the inventory any more.
+    /// The quick slot cells sit in the equipment board's QUICK SLOTS boxes (EquipmentPanel,
+    /// Cartur 2026-10-03). The three food diamonds on the HUD only show what is in them - item,
+    /// key letter, countdown - and take no clicks. Host below is how the diamonds used to BE the
+    /// cells; the same trick now puts the inventory's first row on the HUD hotbar board (see
+    /// HostOn and HotbarRow).
     ///
     /// Part 1 still owns everything the diamond draws: the frame, the item icon, the key
     /// letter and the food countdown. None of that changed.
@@ -49,9 +51,10 @@ namespace CarturUIHud
         internal static ItemDrop.ItemData Item(int index) =>
             index >= 0 && index < Count ? Slots.All[index]?.Item : null;
 
-        // ---- the diamonds are the slots ---------------------------------------------------
+        // ---- a real inventory cell laid over a HUD box ---------------------------------------
 
-        private static readonly InventoryElement[] s_hosted = new InventoryElement[Count];
+        private static readonly System.Collections.Generic.List<InventoryElement> s_hosted =
+            new System.Collections.Generic.List<InventoryElement>();
 
         /// <summary>
         /// Lays a quick slot's real inventory cell over its diamond as an invisible hit area.
@@ -71,13 +74,14 @@ namespace CarturUIHud
         /// Called from EquipmentPanel as the grid lays out, because the cells do not exist
         /// until InventoryGrid has built them, which is after the HUD is up.
         /// </summary>
-        internal static void Host(int index, InventoryElement element)
+        internal static void HostOn(InventoryElement element, RectTransform box)
         {
-            RectTransform box = HudSkin.QuickBox(index);
             if (element == null || box == null)
                 return;
 
-            s_hosted[index] = element;
+            if (!s_hosted.Contains(element))
+                s_hosted.Add(element);
+            s_hosted.RemoveAll(e => e == null);   // cells die with a grid rebuild
             GameObject go = element.gameObject;
             go.SetActive(true);
 
@@ -133,6 +137,11 @@ namespace CarturUIHud
             // enough on its own. EquipmentPanel.Bare puts the plate and the whole colour block
             // out together, which is the same thing the equipment cells need.
             EquipmentPanel.Bare(go);
+
+            // The hover grows the hotbar box this cell sits on, the same as an inventory cell
+            // grows itself (Cartur, 2026-10-04): the cell draws nothing, so growing it alone showed nothing.
+            var fx = go.GetComponent<HoverFx>() ?? go.AddComponent<HoverFx>();
+            fx.Target = box;
 
             // Invisible, but still a raycast target - that is the whole job. A Graphic with no
             // sprite and a clear colour still receives the pointer; disabling it would leave a
@@ -204,9 +213,9 @@ namespace CarturUIHud
             // A controller can move onto a quick slot, but its cell is drawn on the HUD, far
             // from the panel - and the cell's own selection square is switched off. So the
             // diamond itself is lit instead.
-            Slots.Slot selected = open ? GamepadSlots.Selected() : null;
-            HudSkin.SetQuickSelection(selected != null && selected.Kind == Slots.Kind.Quick
-                ? selected.Index : -1);
+            // The quick slots are ordinary cells on the equipment board now, with their own
+            // selection marker, so the diamonds no longer light for a controller.
+            HudSkin.SetQuickSelection(-1);
         }
 
         private static bool s_clickable = true;

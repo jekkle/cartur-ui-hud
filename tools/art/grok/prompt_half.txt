@@ -1,0 +1,5 @@
+Edit this image. It is a dark carved Norse game UI panel: aged bronze Celtic knotwork border, raven heads with glowing teal eyes, rune strips, a medallion on the top edge, dark weathered wood.
+
+Change exactly one thing: make the whole border HALF as thick. The knotwork rails, the rune strips, the corner pieces, the raven heads and the medallions all shrink to half their size, so the border is a slimmer frame and the inner wood area grows outward to fill the space the border gave up. The outer rectangle stays the same size.
+
+Keep everything else identical in style: the same bronze knotwork pattern, the same teal glowing runes and raven eyes, the same dark wood. Anything inside the wood area stays as it is, just with more room. No words. Plain flat pure white background outside the panel, no shadow.

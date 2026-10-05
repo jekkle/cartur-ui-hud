@@ -80,9 +80,15 @@ namespace CarturUIHud
             var head = elements[0]?.transform as RectTransform;
             if (head == null)
                 return;
-            Vector2 origin = head.anchoredPosition;
             float space = grid.m_elementSpace;
 
+            if (Boards)
+            {
+                LayOnBoards(grid, gui, elements, width, head, space);
+                return;
+            }
+
+            Vector2 origin = head.anchoredPosition;
             RowShift = Mathf.Max(0f, Pad + head.rect.height + Air - space);
 
             int last = Mathf.Min(elements.Count, Slots.VisibleCells);
@@ -97,6 +103,102 @@ namespace CarturUIHud
             }
 
             Place(grid, elements, width);
+        }
+
+        // ---- Cartur's boards (2026-10-03) ---------------------------------------------------
+        //
+        // The hotbar has its own board on the HUD and the bag has its own board under it. The
+        // inventory's first row IS the hotbar's eight items, so it is not drawn in the bag at all:
+        // while the bag is open its cells are laid invisibly over the hotbar board's boxes
+        // (QuickSlots.HostOn) - the hotbar keeps drawing the icons, the cells take the clicks, the
+        // drags and the drops. The bag board holds rows two onward. Cartur's call: "Hotbar board
+        // is row 1", and the bag "opens under the hotbar lined up".
+
+        internal static bool Boards => InventoryBoard.Active && Hotbar.BoardActive;
+
+        /// <summary>Height of the visible grid, for whoever sizes the grid root.</summary>
+        internal static float GridHeight(InventoryGrid grid) =>
+            Boards ? (Slots.VisibleRows - 1) * InventoryBoard.RowPitch(grid.m_elementSpace)
+                   : Slots.VisibleRows * grid.m_elementSpace + RowShift;
+
+        // Vanilla's own origin for the grid - where it put element 0 - taken while element 0 is
+        // still in the grid. Once that cell has been lifted onto the hotbar its position means
+        // nothing here, and "move it down a bit" from a moved cell would walk the rows.
+        private static Vector2 s_origin;
+
+        private static void LayOnBoards(InventoryGrid grid, InventoryGui gui, List<InventoryElement> elements,
+                                        int width, RectTransform head, float space)
+        {
+            if (head.parent == grid.m_gridRoot)
+                s_origin = head.anchoredPosition;
+
+            // A grid one row shorter than vanilla thinks, and a panel to match.
+            RowShift = -space;
+
+            for (int c = 0; c < width && c < elements.Count; c++)
+            {
+                RectTransform box = Hotbar.SlotBox(c);
+                if (box != null)
+                    QuickSlots.HostOn(elements[c], box);
+            }
+
+            float rowPitch = InventoryBoard.RowPitch(space);
+            int last = Mathf.Min(elements.Count, Slots.VisibleCells);
+            for (int i = width; i < last; i++)
+            {
+                var rt = elements[i]?.transform as RectTransform;
+                if (rt == null)
+                    continue;
+                rt.anchoredPosition = new Vector2(
+                    s_origin.x + (i % width) * space,
+                    s_origin.y - (i / width - 1) * rowPitch);
+                // The board paints every cell, so the cell's own frame drew a second box inside it
+                // (Cartur, 2026-10-04: "the main inventory looks doubled").
+                if (rt.GetComponent<Image>()?.sprite != null)
+                    EquipmentPanel.Bare(rt.gameObject);
+            }
+
+            var first = elements[width]?.transform as RectTransform;
+            var second = elements.Count > width + 1 ? elements[width + 1]?.transform as RectTransform : null;
+            InventoryBoard.Place(grid, first, Slots.VisibleRows - 1);
+            // Placed under the hotbar once, if it is still where the old layout left it, then left to
+            // edit mode - see InventoryBoard.Follow.
+            InventoryBoard.Follow(gui, first, second);
+            Retire(grid, gui);
+        }
+
+        /// <summary>
+        /// What the board replaces: this row's own bar, and the panel's old frame. The frame's
+        /// object stays - edit mode hit-tests against its rect - only its picture goes.
+        /// </summary>
+        private static void Retire(InventoryGrid grid, InventoryGui gui)
+        {
+            Transform bar = grid.m_gridRoot != null ? grid.m_gridRoot.Find(PanelName) : null;
+            if (bar != null && bar.gameObject.activeSelf)
+                bar.gameObject.SetActive(false);
+            Image frame = gui.m_player != null ? gui.m_player.Find("Bkg")?.GetComponent<Image>() : null;
+            if (frame == null)
+                return;
+            if (frame.enabled)
+                frame.enabled = false;
+
+            // Edit mode grabs the inventory by this rect (InventoryScreen.Register, read live by
+            // HudLayout), and it was still the old frame's - one row shorter and above the board -
+            // so the board could not be dragged (Cartur: "I can't move the inventory panel").
+            // It is laid over the board instead.
+            var board = grid.m_gridRoot != null ? grid.m_gridRoot.Find(InventoryBoard.Name) as RectTransform : null;
+            if (board == null)
+                return;
+            var hit = (RectTransform)frame.transform;
+            var parent = (RectTransform)hit.parent;
+            var c = new Vector3[4];
+            board.GetWorldCorners(c);
+            Vector2 lo = parent.InverseTransformPoint(c[0]), hi = parent.InverseTransformPoint(c[2]);
+            hit.anchorMin = hit.anchorMax = new Vector2(0.5f, 0.5f);
+            hit.pivot = new Vector2(0.5f, 0.5f);
+            Vector2 mid = (lo + hi) * 0.5f - parent.rect.center;
+            hit.anchoredPosition = mid;
+            hit.sizeDelta = hi - lo;
         }
 
         private static void Place(InventoryGrid grid, List<InventoryElement> elements, int width)

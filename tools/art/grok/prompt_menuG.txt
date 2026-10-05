@@ -1,0 +1,5 @@
+Two images side by side. Edit ONLY the LEFT image, a dark carved Norse menu panel with six button bars.
+
+Change one thing: give its interior background the same weathered vertical wood plank paneling as the RIGHT image - visible vertical plank seams and wood grain behind and between the bars, instead of the plain flat dark fill.
+
+Keep everything else in the left image exactly as it is: the six bars (same size, same even spacing, same positions, still exactly six), the bronze knotwork border, the four raven heads, the tree-of-life medallion, the outer shape. Bars stay empty, no words. Pure white background outside the panel, no shadow. Output only the edited left panel.

@@ -31,7 +31,8 @@ namespace CarturUIHud
             float ppu = canvas != null ? canvas.referencePixelsPerUnit : 100f;
 
             Skin.Apply(bar, "hotbar", ppu);
-            Back((RectTransform)bar, ppu);
+            if (!BoardActive)
+                Back((RectTransform)bar, ppu);
             HotkeyBar hotkeys = bar.GetComponent<HotkeyBar>();
             Skin.Apply(hotkeys?.m_elementPrefab?.transform, "hotbar element prefab", ppu);
 
@@ -39,7 +40,10 @@ namespace CarturUIHud
             // from the last one would leave the new bar unmatched.
             s_bar = hotkeys;
             s_matched = false;
+            s_board = null;
+            s_slots = null;
             Match();
+            PlaceBoard();
 
             HudLayout.Reset(Owner, null);
 
@@ -103,7 +107,118 @@ namespace CarturUIHud
             // the cell itself. These two lines are what will say which part it is.
             Log.LogInfo("hotbar cell parts: " + Parts(barCell));
             Log.LogInfo("grid cell parts:   " + Parts(gridCell));
+
+            // The spacing just changed, and the board's boxes follow it.
+            PlaceBoard();
         }
+
+        // ---- Cartur's hotbar board (Assets/board_hotbar.png, 2026-10-03) ---------------------
+        //
+        // His picture behind the bar, its eight painted boxes on the eight slots. Measured off the
+        // PNG (1684x425) by the gaps between its boxes and checked by drawing them back on the art
+        // (tools/art/out/hotbar_boxes.png): 154 px apart, box 0 centred at (308, 196).
+        //
+        // Where a slot is, is the game's own rule, read from HotkeyBar.UpdateIcons with Cecil:
+        // element i is put at localPosition (i * m_elementSpace, 0) in the bar. So the board and the
+        // slot boxes below are placed from that rule and the prefab's pivot, not from live cells -
+        // the bar only builds as many cells as there are bound items, and may have none.
+
+        private const string BoardName = "CarturUI_HotbarBoard";
+        private const string SlotsName = "CarturUI_HotbarSlots";
+        private const float BoxPitchPx = 154f;
+        private static readonly Vector2 Box0Px = new Vector2(308f, 196f);
+        private const float Gap = 6f;   // between the hotbar board and the bag board under it
+
+        internal static bool BoardActive => AssetLoader.Board("hotbar") != null;
+
+        private static RectTransform s_board;
+        private static RectTransform s_slots;
+
+        /// <summary>The hotbar board's rect, or null when it is not in use.</summary>
+        internal static RectTransform BoardRect => s_board;
+
+        /// <summary>
+        /// An invisible box over hotbar slot <paramref name="index"/>, the size of a slot. The
+        /// inventory's first row is laid on these while the bag is open (HotbarRow), so dragging to
+        /// and from the hotbar board is the game's own drag and drop on its own cells.
+        /// </summary>
+        internal static RectTransform SlotBox(int index)
+        {
+            if (s_slots == null || index < 0 || index >= s_slots.childCount)
+                return null;
+            return s_slots.GetChild(index) as RectTransform;
+        }
+
+        /// <summary>World-space room the bag board must leave under the hotbar board.</summary>
+        internal static float BoardGap => Gap;
+
+        private static Vector3 SlotCentre(int index)
+        {
+            var prefab = s_bar.m_elementPrefab.transform as RectTransform;
+            Vector2 size = prefab != null ? prefab.sizeDelta : new Vector2(64f, 64f);
+            Vector2 pivot = prefab != null ? prefab.pivot : new Vector2(0.5f, 0.5f);
+            return new Vector3(index * s_bar.m_elementSpace + (0.5f - pivot.x) * size.x,
+                               (0.5f - pivot.y) * size.y, 0f);
+        }
+
+        private static void PlaceBoard()
+        {
+            if (s_bar == null || !BoardActive || s_bar.m_elementPrefab == null)
+                return;
+            var bar = (RectTransform)s_bar.transform;
+            Texture2D tex = AssetLoader.Board("hotbar");
+            float s = s_bar.m_elementSpace / BoxPitchPx;   // canvas units per source px
+
+            if (s_board == null)
+            {
+                var go = new GameObject(BoardName, typeof(RectTransform), typeof(Image));
+                s_board = (RectTransform)go.transform;
+                s_board.SetParent(bar, false);
+                Image img = go.GetComponent<Image>();
+                img.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height),
+                                           new Vector2(0f, 1f), 100f, 0, SpriteMeshType.FullRect);
+                img.type = Image.Type.Simple;
+                img.raycastTarget = false;
+                img.material = null;   // full brightness - see valheim-litpanel-material
+            }
+            s_board.anchorMin = s_board.anchorMax = bar.pivot;
+            s_board.pivot = new Vector2(0f, 1f);
+            s_board.sizeDelta = new Vector2(tex.width * s, tex.height * s);
+            s_board.localPosition = SlotCentre(0) + new Vector3(-Box0Px.x * s, Box0Px.y * s, 0f);
+            s_board.localScale = Vector3.one;
+            s_board.SetAsFirstSibling();   // behind the cells
+
+            if (s_slots == null)
+            {
+                var go = new GameObject(SlotsName, typeof(RectTransform));
+                s_slots = (RectTransform)go.transform;
+                s_slots.SetParent(bar, false);
+                for (int i = 0; i < 8; i++)
+                    new GameObject("Slot" + i, typeof(RectTransform)).transform.SetParent(s_slots, false);
+            }
+            s_slots.anchorMin = s_slots.anchorMax = bar.pivot;
+            s_slots.pivot = new Vector2(0.5f, 0.5f);
+            s_slots.sizeDelta = Vector2.zero;
+            s_slots.localPosition = Vector3.zero;
+            var cell = (RectTransform)s_bar.m_elementPrefab.transform;
+            for (int i = 0; i < s_slots.childCount; i++)
+            {
+                var rt = (RectTransform)s_slots.GetChild(i);
+                rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.sizeDelta = cell.sizeDelta;
+                rt.localPosition = SlotCentre(i);
+            }
+            s_slots.SetAsLastSibling();   // over the bar's own cells
+
+            // The bar's old 9-slice panel, if a previous run built one, is what this replaces.
+            Transform back = bar.Find(BackName);
+            if (back != null)
+                back.gameObject.SetActive(false);
+            Log.LogInfo("hotbar board placed: " + tex.width + "x" + tex.height + " px at "
+                + s.ToString("0.####") + " units/px, box pitch " + s_bar.m_elementSpace);
+        }
+
 
         /// <summary>Each direct child of a cell prefab with its rect, for comparing the two.</summary>
         private static string Parts(RectTransform cell)

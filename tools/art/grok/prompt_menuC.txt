@@ -1,0 +1,5 @@
+Edit this image of a dark carved Norse game menu panel.
+
+Make the whole panel shorter: its height should be about 1.35 times its width. Inside it there must be EXACTLY 6 (six) recessed button bars in one centred column, evenly spaced, filling the interior from the top border to the bottom border with equal gaps. Not 7, not 8: six. Count: 1, 2, 3, 4, 5, 6.
+
+Keep the bronze knotwork border, the four raven heads with teal eyes, the tree-of-life medallion on the top edge, the dark wood and the bar style exactly as they are. All bars empty, no words. Pure white background, no shadow.

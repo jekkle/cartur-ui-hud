@@ -247,6 +247,25 @@ namespace CarturUIHud
         /// </summary>
         public static Sprite EquipmentPanel { get; private set; }
 
+        /// <summary>
+        /// Cartur's 2026-10-03 panel boards (tools/art/boards.py): each one his picture with only
+        /// the white around it made transparent. Raw textures, because the inventory board is
+        /// drawn as slices of itself - see InventoryBoard - rather than as one sprite.
+        /// Null when the PNG is missing, and every user falls back to what it drew before.
+        /// </summary>
+        public static Texture2D Board(string name) =>
+            s_boards.TryGetValue(name, out Texture2D tex) ? tex : null;
+
+        private static readonly Dictionary<string, Texture2D> s_boards = new Dictionary<string, Texture2D>();
+        private static readonly string[] s_boardNames =
+            { "inventory", "hotbar", "equipment", "crafting", "wide", "tall", "small", "banner", "button",
+              "mainmenu", "charselect", "world", "serverlist", "eula", "newworld", "modifiers", "namepanel", "custom",
+              "window", "window_base", "craftingfull", "grid", "grid_base", "grid_band", "grid_wood", "store", "adventure", "enchant",
+              "enchant_sacrifice", "enchant_convert", "enchant_enchant", "enchant_augment", "enchant_disenchant",
+              "enchant_rune", "enchant_upgrade",
+              "slider_track", "slider_fill", "slider_knob",
+              "chest_icon_take", "chest_icon_stack", "chest_icon_sort", "chest_icon_sortall" };
+
         public static string AssetsDir { get; private set; }
 
         /// <summary>Swap the panel piece for the generated wood one. Set before LoadTextures.</summary>
@@ -267,6 +286,9 @@ namespace CarturUIHud
             s_knotBottomTex = Load("panel_knot_bottom.png", log);
             s_shieldExcluded = Load("shield_excluded.png", log);
             s_equipmentPanel = Load("equipment_panel.png", log);
+            foreach (string board in s_boardNames)
+                s_boards[board] = Load("board_" + board + ".png", log);
+            TintToBag(Board("hotbar"));
 
             // Menu pieces are optional: a missing one leaves that vanilla sprite alone, which
             // Skin logs, rather than taking the HUD down with it.
@@ -367,10 +389,84 @@ namespace CarturUIHud
             };
 
             if (LoadImageViaReflection(tex, File.ReadAllBytes(path)))
+            {
+                ClearFringe(tex);
                 return tex;
+            }
 
             log.LogWarning("ImageConversion.LoadImage failed for " + path);
             return null;
+        }
+
+        /// <summary>
+        /// The boards were cut from white backgrounds, so their fully transparent pixels still hold
+        /// white (board_world.png: 253/253/252). Bilinear filtering blends a sample's colour with its
+        /// transparent neighbour's, which drew a 1 px light line round the panels (Cartur,
+        /// 2026-10-04, world and server select). Transparent pixels are made black: they never
+        /// show, and an edge blended towards black is invisible against the dark frames.
+        /// </summary>
+        private static void ClearFringe(Texture2D tex)
+        {
+            Color32[] px = tex.GetPixels32();
+            bool changed = false;
+            for (int i = 0; i < px.Length; i++)
+                if (px[i].a == 0 && (px[i].r | px[i].g | px[i].b) != 0)
+                {
+                    px[i] = new Color32(0, 0, 0, 0);
+                    changed = true;
+                }
+            // The cut also left the outermost ring half-mixed with that white: semi-transparent
+            // light grey (board_world.png 92/91/86, board_grid.png 94/92/83), a fainter line once the
+            // white was gone (pilot, 2026-10-04). Each takes the colour of an opaque neighbour, keeping
+            // its own alpha, so the edge stays soft but is the frame's colour.
+            int w = tex.width, h = tex.height;
+            var src = (Color32[])px.Clone();
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    if (src[i].a == 0 || src[i].a == 255)
+                        continue;
+                    // Only the outer ring - a pixel touching the clear outside - not a soft glow inside.
+                    bool outside = (x > 0 && src[i - 1].a == 0) || (x < w - 1 && src[i + 1].a == 0)
+                                   || (y > 0 && src[i - w].a == 0) || (y < h - 1 && src[i + w].a == 0);
+                    if (!outside)
+                        continue;
+                    int n = x > 0 && src[i - 1].a == 255 ? i - 1
+                          : x < w - 1 && src[i + 1].a == 255 ? i + 1
+                          : y > 0 && src[i - w].a == 255 ? i - w
+                          : y < h - 1 && src[i + w].a == 255 ? i + w : -1;
+                    if (n < 0)
+                        continue;
+                    px[i] = new Color32(src[n].r, src[n].g, src[n].b, src[i].a);
+                    changed = true;
+                }
+            if (!changed)
+                return;
+            tex.SetPixels32(px);
+            tex.Apply(false);
+        }
+
+        /// <summary>
+        /// The hotbar board's wood read lighter and warmer than the bag board's. Measured inside the
+        /// empty cells, clear of the rune strip (2026-10-04): hotbar 32/26/20, bag 24/18/11, so the
+        /// wood is scaled by bag/hotbar. Teal pixels (runes, raven eyes: green or blue 25 over red)
+        /// keep their glow, which a plain Image.color tint would dim. The art file is not touched.
+        /// </summary>
+        private static void TintToBag(Texture2D tex)
+        {
+            if (tex == null)
+                return;
+            Color32[] px = tex.GetPixels32();
+            for (int i = 0; i < px.Length; i++)
+            {
+                Color32 c = px[i];
+                if (c.b > c.r + 25 || c.g > c.r + 25)
+                    continue;
+                px[i] = new Color32((byte)(c.r * 0.742f), (byte)(c.g * 0.685f), (byte)(c.b * 0.562f), c.a);
+            }
+            tex.SetPixels32(px);
+            tex.Apply(false);
         }
 
         private static bool LoadImageViaReflection(Texture2D tex, byte[] data)

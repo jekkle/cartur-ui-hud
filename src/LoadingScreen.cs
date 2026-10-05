@@ -164,7 +164,7 @@ namespace CarturUIHud
 
         private static LoadingIndicator SceneLoaderIndicator()
         {
-            SceneLoader loader = Object.FindObjectOfType<SceneLoader>();
+            SceneLoader loader = Object.FindFirstObjectByType<SceneLoader>();
             if (loader == null || s_sceneLoaderIndicator == null)
                 return null;
             return s_sceneLoaderIndicator.GetValue(loader) as LoadingIndicator;
@@ -276,59 +276,15 @@ namespace CarturUIHud
                 frame.color = new Color(c.r, c.g, c.b, fill.color.a);
         }
 
-        private static bool s_loaderReported;
-
         /// <summary>
-        /// Switch the startup bar on. This indicator ships with m_show = false and nothing in the
-        /// game ever calls SetShow, so vanilla never shows it at all: LateUpdate fades every part
-        /// of it to zero, and SceneLoader.Update then refuses to feed it progress because it bails
-        /// out on IsVisible. That is why the startup screen has no bar of its own, and why the text
-        /// on it belongs to something else - this one's label is empty.
-        ///
-        /// Shown for as long as this Update runs, which is exactly as long as the startup screen is
-        /// the screen. The first attempt gated on _sceneLoadOperation instead and showed nothing:
-        /// no method on SceneLoader ever assigns that field - it is written from the compiler's
-        /// state machine for the load coroutine - so it reads null for most of the screen.
-        ///
-        /// IsVisible is not m_show: it is the two fade values, so it stays false for the frames
-        /// the fade takes. Comparing against it here just means SetShow is called until the fade
-        /// has actually started.
+        /// No "Generating..." over the world-join bar (Cartur, 2026-10-04: "remove the generating
+        /// text"). Hud.UpdateProgressIndicator writes it once, through SetText("$menu_generating",
+        /// true), when a server starts generating locations (read off the IL). Skipping that one
+        /// call is the whole change; every other text the indicator is given still goes through.
         /// </summary>
-        [HarmonyPatch(typeof(SceneLoader), "Update")]
-        [HarmonyPostfix]
-        private static void ShowLoaderBar(SceneLoader __instance)
-        {
-            LoadingIndicator indicator = s_sceneLoaderIndicator?.GetValue(__instance) as LoadingIndicator;
-            if (indicator == null)
-                return;
-
-            // Not over the opening videos. The intro cinematics play on this same screen, and
-            // a progress bar across them is just clutter - nothing is loading that the player
-            // is waiting on.
-            //
-            // IsStartedPlaying, not IsPlaying: the latter reads s_instance.m_videoPlayer with
-            // no null check of its own and throws before a cinematic has ever been set up.
-            // This one is a static bool and is safe whenever it is asked.
-            if (CinematicsManager.IsStartedPlaying())
-            {
-                if (indicator.IsVisible)
-                    indicator.SetShow(false);
-                return;
-            }
-
-            if (!indicator.IsVisible)
-                indicator.SetShow(true);
-
-            // One shot, the first frame the bar has actually drawn something. Never reset.
-            Image fill = s_progress?.GetValue(indicator) as Image;
-            if (s_loaderReported || fill == null || fill.color.a <= 0f)
-                return;
-
-            s_loaderReported = true;
-            Log.LogInfo("startup bar visible: fill=" + fill.fillAmount.ToString("0.###")
-                + "  alpha=" + fill.color.a.ToString("0.##")
-                + "  active=" + indicator.gameObject.activeInHierarchy);
-        }
+        [HarmonyPatch(typeof(LoadingIndicator), "SetText")]
+        [HarmonyPrefix]
+        private static bool NoGenerating(string progressText) => progressText != "$menu_generating";
 
         /// <summary>
         /// The world-join bar. Vanilla only fills this while a server generates locations, and it

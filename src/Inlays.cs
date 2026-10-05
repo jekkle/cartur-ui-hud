@@ -6,14 +6,12 @@ using UnityEngine.UI;
 namespace CarturUIHud
 {
     /// <summary>
-    /// Two pieces of gold art laid into the empty parts of the inventory: the longship in the
-    /// player panel and the serpent in the item details panel, the one every crafting station
-    /// shares.
+    /// Gold art laid into an empty part of the inventory: the longship in the player panel. The
+    /// serpent that sat in the recipe pane is gone - Cartur's crafting board paints its own dragon
+    /// (removed at his request, 2026-10-03).
     ///
-    /// The ship hangs off InventoryGui.m_player. The serpent hangs off the recipe pane, and off
-    /// the styles tab's own pane when that one is standing in for it. Being children, they are
-    /// carried along by a station opening or by the panel being dragged, and nothing here has to
-    /// follow anything.
+    /// The ship hangs off InventoryGui.m_player. Being a child, it is carried along by the panel
+    /// being dragged, and nothing here has to follow anything.
     ///
     /// Size is a fraction of the panel's own height rather than a pixel count. The player panel
     /// grows with the number of inventory rows, so a fixed size would drift out of its corner;
@@ -41,7 +39,6 @@ namespace CarturUIHud
         private const string FolderName = "inlays";
 
         private static Inlay s_ship;
-        private static Inlay s_serpent;
 
         // Settled by eye in the game, then written down. These were config entries while the
         // position was being found; they are not any more, because the position is found.
@@ -49,8 +46,6 @@ namespace CarturUIHud
         {
             s_ship = new Inlay("ship.png", Corner.BottomRight,
                 scale: 0.6f, x: 14f, y: 0f, opacity: 0.1f);
-            s_serpent = new Inlay("serpent.png", Corner.Center,
-                scale: 0.8f, x: 0f, y: 30f, opacity: 0.2f);
         }
 
         [HarmonyPatch(typeof(InventoryGui), "Awake")]
@@ -58,30 +53,6 @@ namespace CarturUIHud
         private static void Build(InventoryGui __instance)
         {
             s_ship?.Build(__instance.m_player, "player panel");
-            s_serpent?.Build(Details(__instance), "recipe pane");
-        }
-
-        /// <summary>
-        /// The pane the selected recipe is written into. It is not m_info: that measured
-        /// 570x130 at runtime, which is the strip above the crafting list, not the tall pane the
-        /// description fills. So it is found from the text the game itself writes there -
-        /// m_recipeDecription - by walking up to the last parent before m_crafting, which is the
-        /// pane as a whole rather than the text's own layout row.
-        /// </summary>
-        private static RectTransform Details(InventoryGui gui)
-        {
-            if (gui.m_recipeDecription == null || gui.m_crafting == null)
-                return null;
-
-            RectTransform last = null;
-            for (Transform t = gui.m_recipeDecription.transform; t != null; t = t.parent)
-            {
-                if (t == gui.m_crafting)
-                    break;
-                if (t is RectTransform rt)
-                    last = rt;
-            }
-            return last;
         }
 
         // The panel is only the size it is going to be once the screen is up: the player panel
@@ -93,20 +64,49 @@ namespace CarturUIHud
         private static void Resize()
         {
             s_ship?.Apply();
-            s_serpent?.Apply();
         }
 
         /// <summary>
-        /// The serpent again, on the styles pane. That pane stands in for the recipe pane, and
-        /// is destroyed and rebuilt every time the selection changes, so it asks for the art
-        /// each time rather than this having to watch for it.
+        /// The ship rides the bag board's bottom-right corner, inside the rails (Cartur, 2026-10-04:
+        /// "anchor to ... the bottom row of the growing inventory panel"). Kept in the board's own
+        /// units, so rows coming or going move the corner and the ship with it, never its size.
         /// </summary>
-        internal static void Decorate(RectTransform stylePane)
+        internal static void ShipOnBoard(RectTransform board)
         {
-            if (stylePane == null || s_serpent == null || s_serpent.Has(stylePane))
+            Image ship = s_ship?.First;
+            if (ship == null || board == null || board.lossyScale.x <= 0f)
                 return;
-            s_serpent.Build(stylePane, "styles pane");
+            var rt = ship.rectTransform;
+            var b = new Vector3[4];
+            board.GetWorldCorners(b);
+            float k = board.lossyScale.x;     // world per board unit
+            if (!s_shipPinned)
+            {
+                var c = new Vector3[4];
+                rt.GetWorldCorners(c);
+                // Its size from where the panel rule put it; its place is inside the board's corner,
+                // on the wood, clear of the rails - kept from the old rule it hung half below the
+                // bottom rail (Cartur, 2026-10-04). Rails are 62 px of the board's 1670 across.
+                float rail = (b[2].x - b[0].x) / k * 62f / 1670f;
+                s_shipRight = rail * 1.4f;
+                s_shipBottom = rail * 1.4f;
+                s_shipSize = new Vector2(c[2].x - c[0].x, c[2].y - c[0].y) / k;
+                s_shipPinned = true;
+                s_ship.Pinned = true;
+                Log.LogInfo("ship pinned to the bag board's corner: " + Mathf.Round(s_shipSize.x) + "x" + Mathf.Round(s_shipSize.y)
+                            + ", " + Mathf.Round(s_shipRight) + " in from the right, " + Mathf.Round(s_shipBottom) + " up");
+            }
+            Vector3 p = rt.lossyScale;
+            if (p.x <= 0f || p.y <= 0f)
+                return;
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(1f, 0f);
+            rt.sizeDelta = new Vector2(s_shipSize.x * k / p.x, s_shipSize.y * k / p.y);
+            rt.position = new Vector3(b[2].x - s_shipRight * k, b[0].y + s_shipBottom * k, rt.position.z);
         }
+
+        private static bool s_shipPinned;
+        private static float s_shipRight, s_shipBottom;
+        private static Vector2 s_shipSize;
 
         /// <summary>One piece of art, on every panel that asked for it.</summary>
         private sealed class Inlay
@@ -125,6 +125,11 @@ namespace CarturUIHud
             private readonly HashSet<string> _logged = new HashSet<string>();
             private Texture2D _tex;
             private float _lastLogged;
+
+            /// <summary>Placed by someone else now (ShipOnBoard); the panel rule leaves it be.</summary>
+            internal bool Pinned;
+
+            internal Image First => _images.Count > 0 ? _images[0] : null;
 
             /// <param name="scale">Height as a fraction of the panel's height.</param>
             /// <param name="x">Inset from the pinned corner, sideways, in pixels.</param>
@@ -188,15 +193,6 @@ namespace CarturUIHud
                     + _tex.width + "x" + _tex.height + " source), drawn over: " + order);
             }
 
-            /// <summary>Whether this inlay is already on that panel, so it is not doubled.</summary>
-            internal bool Has(Transform panel)
-            {
-                foreach (Image image in _images)
-                    if (image != null && image.transform.parent == panel)
-                        return true;
-                return false;
-            }
-
             internal void Apply()
             {
                 if (_tex == null)
@@ -216,6 +212,8 @@ namespace CarturUIHud
                 var rt = (RectTransform)image.transform;
 
                 image.color = new Color(1f, 1f, 1f, Mathf.Clamp01(_opacity));
+                if (Pinned)
+                    return;
 
                 var panel = rt.parent as RectTransform;
                 if (panel == null)

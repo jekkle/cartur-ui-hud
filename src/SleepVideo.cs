@@ -17,24 +17,33 @@ namespace CarturUIHud
     /// Hud.UpdateBlackScreen. So this rides on m_sleepingProgress: it shows exactly while that
     /// object is up and stops when it goes, and nothing here has to know what sleeping is.
     ///
-    /// A night is one of four things, rolled before anything is picked: a card, the game's own
-    /// dream text read against the plain backdrop, a video, or black. Rolling the kind first is
-    /// what makes the odds the odds - one shared bag of files made a video as likely as a card,
-    /// because there happened to be six of one and twenty of the other.
+    /// A night is one of four things, rolled before anything is picked: our own dream, the
+    /// game's own dream, a video, or black. Rolling the kind first is what makes the odds the
+    /// odds - one shared bag of files made a video as likely as anything else, because there
+    /// happened to be six of one and twenty of the other.
+    ///
+    /// Both kinds of dream are read against the backdrop - background.* in assets/sleep - and
+    /// the backdrop can be a video, which is the point: the words move over moving cloud
+    /// rather than sitting on a still. Text is never baked into the picture behind it.
     ///
     /// The vanilla dream nights are the game's, not ours. DreamTexts.GetRandomDreamText filters
     /// its list by global keys, so boss dreams only come after that boss, then rolls the entry's
     /// own m_chanceToDream and can come back with nothing at all. A quiet night under the
     /// backdrop is that roll failing, and it is left alone.
     ///
-    /// Cards keep their own bag and videos theirs - everything shows once before anything
+    /// Our dreams are the lines in assets/sleep/dreams.txt, handed to the game through its own
+    /// SleepText - see OurDream for why that beats drawing a label here.
+    ///
+    /// Dreams keep their own bag and videos theirs - everything shows once before anything
     /// repeats, and the refill leaves out the one just shown so two nights running cannot be
     /// the same.
     ///
     /// Nothing is shown until the world has finished going black, then it fades in over a
-    /// second, and fades out over a second when the sleep ends - our own alpha, because neither
-    /// of the game's objects here lives long enough to carry a fade out. See Build for which one
-    /// it hangs off and why, and Fade for how the going-black is waited on rather than timed.
+    /// second. The fade out is the game's own: the screen hangs inside LoadingBlack, whose
+    /// CanvasGroup takes everything under it to nothing over a second as the player wakes, so
+    /// the picture dissolves with the black rather than over the world. See Build for why it
+    /// has to live in that branch, and Fade for how the going-black is waited on rather than
+    /// timed.
     ///
     /// Videos go through Unity's VideoPlayer - the class the game plays its own cinematics with
     /// - reading a file path rather than a clip, so a file is dropped in and works with no
@@ -61,9 +70,9 @@ namespace CarturUIHud
 
         private const string FolderName = "sleep";
         private const string ScreenName = "CarturUI_SleepScreen";
+        private const string DreamsFile = "dreams.txt";
 
         private const float FadeIn = 1f;
-        private const float FadeOut = 1f;
 
         private static ConfigEntry<Show> s_show;
         private static ConfigEntry<float> s_volume;
@@ -87,8 +96,8 @@ namespace CarturUIHud
             s_videoChance = config.Bind("Sleep screen", "videoChance", 0.08f,
                 "The chance a night shows a video. 0 to 1.");
             s_textChance = config.Bind("Sleep screen", "vanillaDreamChance", 0.33f,
-                "The chance a night shows the game's own dream text over background.jpg "
-                + "instead of a card. 0 to 1.");
+                "The chance a night shows the game's own dream text over the backdrop "
+                + "instead of one from dreams.txt. 0 to 1.");
             s_blackChance = config.Bind("Sleep screen", "blackChance", 0.15f,
                 "The chance a night shows nothing at all. 0 to 1.");
         }
@@ -121,15 +130,11 @@ namespace CarturUIHud
             }
 
             // The night is settled on the frame the screen comes up, before anything is drawn,
-            // because what it turns out to be decides whether vanilla's text is wanted. Waking
-            // does not tear it down: it starts the fade out, and Fade calls Off at the end of it.
+            // because what it turns out to be decides whether vanilla's text is wanted.
             if (sleeping && !s_up)
                 On();
-            else if (!sleeping && s_up && s_left <= 0f)
-            {
-                s_left = Time.unscaledTime;
-                s_alphaAtLeave = s_alpha;
-            }
+            else if (!sleeping && s_up)
+                Off();          // by now LoadingBlack's own fade has already taken us to nothing
 
             if (s_up)
                 Fade(__instance);
@@ -162,15 +167,25 @@ namespace CarturUIHud
             s_began = Time.unscaledTime;
             s_up = true;
             s_vanillaText = false;
+            s_ourDream = null;   // last night's, if the player woke before the game asked for it
 
             string pick = Next();
+
+            // One line a night, saying what was rolled and what is queued behind it. A sleep is
+            // a rare event and this is the only way to tell a quiet dream-text night from a
+            // broken one without a second launch.
+            Log.LogInfo("night: " + (pick == null ? "black" : Path.GetFileName(pick))
+                + (s_ourDream != null
+                    ? " + our dream \"" + s_ourDream.Split('\n')[0] + "\""
+                    : s_vanillaText ? " + the game's own dream" : " + no text"));
+
             if (pick == null)
                 return;              // a black night
 
             s_screen.enabled = true;
             s_alpha = 0f;
             s_opaque = 0f;
-            Tint(0f);            // nothing shows until the world has gone black
+            Tint(0f, 0f);        // nothing shows until the world has gone black
 
             if (IsVideo(pick))
             {
@@ -194,67 +209,52 @@ namespace CarturUIHud
         }
 
         /// <summary>
-        /// Nothing at all until the world has finished going black, then a second fading in, and
-        /// a second fading out again once the sleep ends.
+        /// Nothing at all until the world has finished going black, then a second fading in. The
+        /// fade out is not ours: see Build - the screen sits under LoadingBlack, and that group
+        /// fades to nothing over a second when the player wakes, taking the picture with it.
         ///
         /// The wait is not a timer. Hud.UpdateBlackScreen moves m_loadingScreen's alpha towards
         /// 1 over Game.m_fadeTimeSleep, which is set in the scene rather than in code - so the
         /// only honest way to know the world is covered is to read that alpha. That also means
         /// the dream never shows through a half-faded world, whatever that time is set to.
         ///
-        /// A video's sound is tied to the same number, so it comes up and goes down with the
-        /// picture rather than starting at full volume over a black screen.
+        /// A video's sound is multiplied by that same group alpha, because a CanvasGroup fades
+        /// pictures and not sound - without it the audio would stay at full volume through the
+        /// wake and then cut.
         /// </summary>
         private static void Fade(Hud hud)
         {
             if (s_screen == null || !s_screen.enabled)
-            {
-                if (s_left > 0f)
-                    Off();           // a black night still has to end
-                return;
-            }
+                return;              // a black night has nothing to fade
 
-            float now = Time.unscaledTime;
-            if (s_left <= 0f)
-            {
-                if (s_opaque <= 0f)
-                {
-                    if (hud.m_loadingScreen == null || hud.m_loadingScreen.alpha < 1f)
-                    {
-                        Tint(0f);      // the world is still going black - show nothing yet
-                        return;
-                    }
-                    s_opaque = now;
-                }
+            float group = hud.m_loadingScreen != null ? hud.m_loadingScreen.alpha : 1f;
 
-                s_alpha = Mathf.Clamp01((now - s_opaque) / FadeIn);
-            }
-            else
+            if (s_opaque <= 0f)
             {
-                s_alpha = s_alphaAtLeave * (1f - Mathf.Clamp01((now - s_left) / FadeOut));
-                if (s_alpha <= 0f)
+                if (group < 1f)
                 {
-                    Off();
+                    Tint(0f, group);   // the world is still going black - show nothing yet
                     return;
                 }
+                s_opaque = Time.unscaledTime;
             }
 
-            Tint(s_alpha);
+            s_alpha = Mathf.Clamp01((Time.unscaledTime - s_opaque) / FadeIn);
+            Tint(s_alpha, group);
         }
 
-        private static void Tint(float alpha)
+        private static void Tint(float alpha, float group)
         {
             if (s_screen != null)
                 s_screen.color = new Color(1f, 1f, 1f, alpha);
             if (s_player != null && s_volume != null)
-                s_player.SetDirectAudioVolume(0, Mathf.Clamp01(s_volume.Value) * alpha);
+                s_player.SetDirectAudioVolume(0, Mathf.Clamp01(s_volume.Value) * alpha * group);
         }
 
         private static void Off()
         {
             s_up = false;
             s_vanillaText = false;
-            s_left = 0f;
             s_alpha = 0f;
             s_opaque = 0f;
             if (s_player != null)
@@ -298,14 +298,26 @@ namespace CarturUIHud
                 return;
             }
 
-            // Not under m_sleepingProgress, and not under m_loadingScreen either. Read out of
-            // Hud.UpdateBlackScreen: the moment the player stops sleeping, m_sleepingProgress is
-            // switched off outright, and m_loadingScreen fades to 0 over GetFadeDuration - which
-            // returns 1, not m_fadeTimeSleep, because by then the player is no longer sleeping -
-            // and is then SetActive(false). Its CanvasGroup would also multiply our alpha. Either
-            // parent cuts a 2s fade out short, so the screen hangs off the object above them,
-            // which stays up, and this drives its own alpha end to end.
-            Transform host = hud.m_loadingScreen != null ? hud.m_loadingScreen.transform.parent : null;
+            // Inside LoadingBlack - m_loadingScreen - and immediately before Sleeping.
+            //
+            // The whole black screen is one canvas: HUD, sortingOrder 400 with overrideSorting,
+            // measured on a night. So draw order is hierarchy order and nothing but the sibling
+            // index decides who covers whom. The game's own words are
+            // HUD/LoadingBlack/Sleeping/Text and .../Sleeping/DreamText, also measured. Hanging
+            // this screen off HUD put it at index 4 against LoadingBlack's 2, so an opaque video
+            // painted over the dream text every single night.
+            //
+            // Sitting between the black and Sleeping is the only place that works: over the
+            // black plate LoadingBlack itself carries - which has to draw under Sleeping, or
+            // vanilla's own text would never have shown either - and under every word Sleeping
+            // holds.
+            //
+            // The cost is that LoadingBlack's CanvasGroup now owns the fade out, because it
+            // takes this screen with it: Hud.UpdateBlackScreen fades that group to 0 over
+            // GetFadeDuration - which returns 1, not m_fadeTimeSleep, because by then the player
+            // is no longer sleeping - and then SetActive(false)s it. Our own fade out would be
+            // invisible, so there isn't one. See Fade.
+            Transform host = hud.m_loadingScreen != null ? hud.m_loadingScreen.transform : null;
             if (host == null)
                 host = hud.m_sleepingProgress.transform;
 
@@ -317,10 +329,11 @@ namespace CarturUIHud
             rt.anchorMax = Vector2.one;
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
-            // In front of the black screen it now sits beside, and behind nothing: vanilla's own
-            // sleep text is a child of m_sleepingProgress, which is a different branch entirely
-            // and draws later than this one anyway.
-            rt.SetAsLastSibling();
+            Transform sleeping = hud.m_sleepingProgress.transform;
+            if (sleeping.parent == host)
+                rt.SetSiblingIndex(sleeping.GetSiblingIndex());   // Sleeping shifts down one
+            else
+                rt.SetAsLastSibling();
 
             s_target = new RenderTexture(1920, 1080, 0);
             s_screen = go.GetComponent<RawImage>();
@@ -357,15 +370,14 @@ namespace CarturUIHud
                     : " (no rect)"));
             Log.LogInfo("sleep screen ready: " + (Files().Count - videos) + " cards, "
                 + videos + " videos and "
-                + (Backdrop() != null ? "a backdrop" : "no backdrop") + " in " + dir);
+                + (Backdrop() != null ? "backdrop " + Path.GetFileName(Backdrop()) : "no backdrop")
+                + " in " + dir);
         }
 
         private static bool s_up;            // this night has been rolled and dealt with
         private static bool s_vanillaText;   // ... and it turned out to be the game's own dream
         private static float s_opaque;       // when the game's own black screen finished covering
-        private static float s_left;         // when the sleep ended, 0 while it is still going
         private static float s_alpha;        // what was drawn last frame
-        private static float s_alphaAtLeave; // what it was when the fade out started
         private static bool s_warned;
         private static bool s_timed;
         private static float s_began;
@@ -379,21 +391,35 @@ namespace CarturUIHud
         }
 
         /// <summary>
-        /// The one picture with no words on it - background.jpg - which is what a vanilla dream
-        /// text is read against. Held out of the card bag so it never comes up bare.
+        /// The one file with no words on it - background.* - which is what a vanilla dream text
+        /// is read against. Held out of the card and video bags so it never comes up bare.
         /// </summary>
         private static bool IsBackdrop(string path) =>
             Path.GetFileNameWithoutExtension(path).ToLowerInvariant() == "background";
 
+        /// <summary>
+        /// The backdrop, video for preference. It used to be a still only, which is why a dream
+        /// text was read against a picture that did not move. Nothing else had to change: On
+        /// already branches on IsVideo for whatever Next hands it, so a background.mp4 plays
+        /// under the text the same way a card video plays on its own.
+        ///
+        /// A still is still allowed, and is used when there is no video beside it.
+        /// </summary>
         private static string Backdrop()
         {
             string dir = Folder();
             if (!Directory.Exists(dir))
                 return null;
+            string still = null;
             foreach (string path in Directory.GetFiles(dir))
-                if (IsBackdrop(path) && !IsVideo(path))
+            {
+                if (!IsBackdrop(path))
+                    continue;
+                if (IsVideo(path))
                     return path;
-            return null;
+                still = still ?? path;
+            }
+            return still;
         }
 
         private static List<string> Files()
@@ -412,6 +438,129 @@ namespace CarturUIHud
             }
             found.Sort();
             return found;
+        }
+
+        /// <summary>
+        /// The dreams in assets/sleep/dreams.txt: one per block, blank line between blocks, #
+        /// for a comment. Read off disk each night rather than held, because the file is small
+        /// and a reload beats a restart when a line is being changed.
+        /// </summary>
+        private static List<string> Dreams()
+        {
+            var found = new List<string>();
+            string path = Path.Combine(Folder(), DreamsFile);
+            if (!File.Exists(path))
+                return found;
+
+            var block = new List<string>();
+            foreach (string raw in File.ReadAllLines(path))
+            {
+                string line = raw.TrimEnd();
+                if (line.StartsWith("#"))
+                    continue;
+                if (line.Trim().Length == 0)
+                {
+                    if (block.Count > 0)
+                        found.Add(string.Join("\n", block.ToArray()));
+                    block.Clear();
+                    continue;
+                }
+                block.Add(line);
+            }
+            if (block.Count > 0)
+                found.Add(string.Join("\n", block.ToArray()));
+            return found;
+        }
+
+        /// <summary>
+        /// The dream this night is showing, or null. Set on the frame the screen comes up and
+        /// read four seconds later - SleepText.OnEnable does Invoke("ShowDreamText", 4f), so
+        /// the roll is always long finished by the time the game asks. Read off the DLL.
+        /// </summary>
+        private static string s_ourDream;
+        private static readonly List<string> s_said = new List<string>();
+
+        /// <summary>
+        /// One out of a bag: everything is shown once before anything repeats, and the refill
+        /// leaves out the one just shown so two nights running cannot be the same.
+        /// </summary>
+        private static string OneOf(List<string> all, List<string> said)
+        {
+            if (all.Count == 0)
+                return null;
+
+            var left = new List<string>();
+            foreach (string s in all)
+                if (!said.Contains(s))
+                    left.Add(s);
+
+            if (left.Count == 0)
+            {
+                string last = said.Count > 0 ? said[said.Count - 1] : null;
+                said.Clear();
+                foreach (string s in all)
+                    if (s != last || all.Count == 1)
+                        left.Add(s);
+            }
+
+            string pick = left[Random.Range(0, left.Count)];
+            said.Add(pick);
+            return pick;
+        }
+
+        /// <summary>
+        /// Our dreams, handed to the game as one of its own.
+        ///
+        /// SleepText.ShowDreamText asks DreamTexts for a dream, gives up if it gets nothing,
+        /// and otherwise localises it into m_dreamField, enables the field, cross-fades it in
+        /// and hides it again after 6.5 seconds. All of that is worth having, and none of it is
+        /// worth writing twice - so the only thing replaced is the answer to the question. The
+        /// game then draws our words exactly as it draws its own, over whatever the sleep
+        /// screen is showing behind them.
+        ///
+        /// DreamText is public, and so is its constructor and m_text: read off the DLL, not
+        /// reflected at. m_chanceToDream is 1 because the night has already been rolled here.
+        /// </summary>
+        [HarmonyPatch(typeof(DreamTexts), "GetRandomDreamText")]
+        [HarmonyPrefix]
+        private static bool OurDream(ref DreamTexts.DreamText __result)
+        {
+            if (s_ourDream == null)
+                return true;
+
+            __result = new DreamTexts.DreamText
+            {
+                m_text = s_ourDream,
+                m_chanceToDream = 1f,
+            };
+            Log.LogInfo("the game asked for a dream and got ours");
+            s_ourDream = null;
+            return false;
+        }
+
+        /// <summary>
+        /// Leaves the words up for the rest of the night.
+        ///
+        /// ShowDreamText ends with Invoke("HideDreamText", 6.5f) - read off the DLL - and
+        /// HideDreamText cross-fades the field out over another 1.5s. Against a night measured
+        /// at 14.5s on the screen that puts the words away with half of it still to run, which
+        /// is fine over vanilla's plain black and wrong over a backdrop that keeps playing.
+        ///
+        /// Cancelling that one Invoke is the whole change. Nothing has to put the words away
+        /// afterwards: the field lives in LoadingBlack, so the game's own group fade takes them
+        /// with the black as the player wakes, and the next night vanilla re-runs
+        /// DelayedCrossFadeStart, which starts from alpha 0 again.
+        ///
+        /// Only while our own screen is up - with show set to Vanilla or Nothing the game's
+        /// timing is the game's business.
+        /// </summary>
+        [HarmonyPatch(typeof(SleepText), "ShowDreamText")]
+        [HarmonyPostfix]
+        private static void KeepDream(SleepText __instance)
+        {
+            if (s_show == null || s_show.Value != Show.Media || !s_up)
+                return;
+            __instance.CancelInvoke("HideDreamText");
         }
 
         /// <summary>
@@ -445,13 +594,27 @@ namespace CarturUIHud
                 s_vanillaText = true;
                 return backdrop;
             }
+            else if (backdrop != null)
+            {
+                // Our own dreams, on the same moving backdrop the game's own dream gets. The
+                // cards this bucket used to draw were text baked into a still picture, which is
+                // the one thing a moving background cannot be put behind.
+                string dream = OneOf(Dreams(), s_said);
+                if (dream != null)
+                {
+                    s_ourDream = dream;
+                    s_vanillaText = true;
+                    return backdrop;
+                }
+                pool = cards;
+            }
             else
             {
                 pool = cards;
             }
 
             if (pool.Count == 0)
-                return null;
+                return backdrop;   // no cards left to fall back on - the backdrop alone
 
             var left = new List<string>();
             foreach (string f in pool)

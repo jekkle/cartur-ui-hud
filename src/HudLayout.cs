@@ -48,6 +48,8 @@ namespace CarturUIHud
             public ConfigEntry<string> HomeEntry;
             public GameObject Overlay;
             public float Scale = 1f;
+            public Vector2 Rest;   // where the game itself rests the piece
+            public Pin Pin;        // set when an Animator above the piece writes its position
             // Bars drive their frame height from the wheel instead of localScale: their length
             // belongs to the game (max stat), so scaling the transform would stretch it too.
             public Action<float> OnScale;
@@ -149,7 +151,7 @@ namespace CarturUIHud
                 if (!TryParse(e.Entry.Value, out Vector2 position, out float scale, out float length,
                         out float frameScale, out Vector2 frameOffset))
                     continue;
-                e.Move.anchoredPosition = position;
+                SetPos(e, position);
                 e.Scale = Mathf.Clamp(scale, MinScale, MaxScale);
                 e.Length = Mathf.Clamp(length, MinScale, MaxScale);
                 e.FrameScale = Mathf.Clamp(frameScale, MinScale, MaxScale);
@@ -249,7 +251,12 @@ namespace CarturUIHud
             element.Length = Mathf.Clamp(length, MinScale, MaxScale);
             element.FrameScale = Mathf.Clamp(frameScale, MinScale, MaxScale);
             element.FrameOffset = frameOff;
-            move.anchoredPosition = position;
+            element.Rest = fallbackPosition;
+            if (move.GetComponentInParent<Animator>() != null)
+                element.Pin = move.gameObject.GetComponent<Pin>() ?? move.gameObject.AddComponent<Pin>();
+            if (element.Pin != null)
+                element.Pin.Rest = fallbackPosition;
+            SetPos(element, position);
             Apply(element);
 
             s_elements.Add(element);
@@ -269,8 +276,103 @@ namespace CarturUIHud
         }
 
         /// <summary>Driven from the Hud.Update postfix.</summary>
+        /// <summary>
+        /// Saves where a registered piece is now, the same as finishing a drag would. For code that
+        /// places something once on the player's behalf (the inventory board under the hotbar).
+        /// </summary>
+        /// <summary>True the first time it is asked for a key, ever; remembered in the config.</summary>
+        public static bool FirstTime(string key)
+        {
+            var entry = s_config.Bind("Layout migrations", key, false,
+                "Set once a one-time layout move has been done. False to have it done again.");
+            if (entry.Value)
+                return false;
+            entry.Value = true;
+            Persist();
+            return true;
+        }
+
+        public static void Commit(string key)
+        {
+            foreach (Element e in s_elements)
+            {
+                if (e.Key != key)
+                    continue;
+                SetPos(e, e.Move.anchoredPosition);   // what is on screen now becomes the spot
+                Save(e);
+                Persist();
+                return;
+            }
+        }
+
+        private static float s_persistAt = -1f;
+        private static float s_fitAt;
+
+        private static Vector2 Pos(Element e) => e.Pin != null ? e.Pin.Desired : e.Move.anchoredPosition;
+
+        private static void SetPos(Element e, Vector2 p)
+        {
+            e.Move.anchoredPosition = p;
+            e.Pin?.Accept(p);
+        }
+
+        /// <summary>
+        /// Keeps a piece where the player put it when an Animator also drives its position. The
+        /// inventory screen's open animation slides the Player panel from y 350 down to its prefab
+        /// rest (40,-40) on every open - measured by the test pilot, no code involved, so a Harmony
+        /// patch cannot stop it - and that silently threw away the saved spot and every edit-mode
+        /// drag (Cartur: "I can't move the inventory panel"). After the Animator has written, the
+        /// player's offset from rest is added back, so the slide still plays and ends where he put
+        /// the panel. Frames the Animator does not write are left alone.
+        /// </summary>
+        internal sealed class Pin : MonoBehaviour
+        {
+            public Vector2 Rest;
+            public Vector2 Desired;
+            private Vector2 m_written;
+            private RectTransform m_rt;
+
+            public void Accept(Vector2 p)
+            {
+                Desired = p;
+                m_written = p;
+            }
+
+            // Per axis: the screen's Animator does not drive both. It slides the Player panel in
+            // y and the Crafting panel in x only, and leaves the other axis alone. Adding the
+            // offset back on an axis it had not written added it again on top of itself every
+            // frame - the crafting panel ran millions of units down in three seconds (pilot,
+            // 2026-10-04: "it keeps moving"). An axis is offset only when the Animator wrote it.
+            private void LateUpdate()
+            {
+                if (m_rt == null)
+                    m_rt = (RectTransform)transform;
+                Vector2 cur = m_rt.anchoredPosition;
+                bool x = Mathf.Abs(cur.x - m_written.x) > 0.01f, y = Mathf.Abs(cur.y - m_written.y) > 0.01f;
+                if (!x && !y)
+                    return;
+                m_written = new Vector2(x ? cur.x + (Desired.x - Rest.x) : cur.x,
+                                        y ? cur.y + (Desired.y - Rest.y) : cur.y);
+                m_rt.anchoredPosition = m_written;
+            }
+        }
+
         public static void Tick()
         {
+            if (s_persistAt > 0f && Time.realtimeSinceStartup > s_persistAt)
+            {
+                s_persistAt = -1f;
+                Persist();
+            }
+
+            // The outline follows what is drawn, a few times a second while editing.
+            if (s_editing && Time.realtimeSinceStartup > s_fitAt)
+            {
+                s_fitAt = Time.realtimeSinceStartup + 0.25f;
+                foreach (Element e in s_elements)
+                    FitOverlay(e);
+            }
+
             if (s_reloadPending)
             {
                 s_reloadPending = false;
@@ -305,7 +407,7 @@ namespace CarturUIHud
         {
             foreach (Element e in s_elements)
             {
-                e.HomePosition = e.Move.anchoredPosition;
+                e.HomePosition = Pos(e);
                 e.HomeScale = e.Scale;
                 e.HomeLength = e.Length;
                 e.HomeFrameScale = e.FrameScale;
@@ -324,7 +426,7 @@ namespace CarturUIHud
         {
             foreach (Element e in s_elements)
             {
-                e.Move.anchoredPosition = e.HomePosition;
+                SetPos(e, e.HomePosition);
                 e.Scale = e.HomeScale;
                 e.Length = e.HomeLength;
                 e.FrameScale = e.HomeFrameScale;
@@ -342,11 +444,26 @@ namespace CarturUIHud
         {
             s_editing = s_editMode.Value;
 
+            // The inventory screen's full-screen drop catcher ("dropButton", two Graphics) sits on
+            // its canvas above the HUD's, so with the inventory open every click and wheel on the
+            // hotbar went to it, not to the hotbar's edit handle (edit-click log, 2026-10-04). It
+            // stops catching while editing and is given back after.
+            if (InventoryGui.instance != null)
+                foreach (Graphic g in InventoryGui.instance.GetComponentsInChildren<Graphic>(true))
+                    if (g.name == "dropButton")
+                        g.raycastTarget = !s_editing;
+
             foreach (Element e in s_elements)
             {
                 EnsureOverlay(e);
                 if (e.Overlay != null)
+                {
                     e.Overlay.SetActive(s_editing);
+                    // In front of the piece's own parts: the hotbar's labels are raycast targets and
+                    // sat above its handle, so a drag started on them reached nothing (pilot, 2026-10-04).
+                    if (s_editing)
+                        e.Overlay.transform.SetAsLastSibling();
+                }
             }
 
             if (s_editing)
@@ -454,7 +571,7 @@ namespace CarturUIHud
                     return;
                 }
 
-                Vector2 anchor = m_frameDrag ? m_element.FrameOffset : m_element.Move.anchoredPosition;
+                Vector2 anchor = m_frameDrag ? m_element.FrameOffset : Pos(m_element);
                 m_grabOffset = ToLocal(m_element.Move, eventData.pressPosition, eventData.pressEventCamera) - anchor;
             }
 
@@ -481,7 +598,7 @@ namespace CarturUIHud
                 }
                 else
                 {
-                    m_element.Move.anchoredPosition = local;
+                    SetPos(m_element, local);
                 }
             }
 
@@ -505,6 +622,9 @@ namespace CarturUIHud
                     return;
 
                 float step = Mathf.Sign(wheel) * ScaleStep;
+                // Size grows by a percentage, not a fixed amount: +0.05 was a 17% jump at 0.3 and a
+                // 2% one at 2.5, which is what read as not scaling smoothly (Cartur, 2026-10-03).
+                float factor = 1f + step;
                 // Plain wheel is size, shift is the bar's length, ctrl is the frame around it.
                 // Length has to be a control of its own because it is otherwise the game's to
                 // set, from max health; the frame has to be its own because fitting Cartur's art
@@ -514,11 +634,13 @@ namespace CarturUIHud
                 else if (Shift() && m_element.OnLength != null)
                     m_element.Length = Mathf.Clamp(m_element.Length + step, MinScale, MaxScale);
                 else
-                    m_element.Scale = Mathf.Clamp(m_element.Scale + step, MinScale, MaxScale);
+                    m_element.Scale = Mathf.Clamp(m_element.Scale * factor, MinScale, MaxScale);
 
                 Apply(m_element);
                 Save(m_element);
-                Persist();
+                // Written to disk once the wheel stops, not on every notch: each write hitched a
+                // frame and fired the config watcher.
+                s_persistAt = Time.realtimeSinceStartup + 0.5f;
             }
         }
 
@@ -536,10 +658,11 @@ namespace CarturUIHud
         private static bool OnBorder(Element e, Vector2 screen, Camera cam, out float reach)
         {
             reach = 0f;
-            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(e.Hit, screen, cam, out Vector2 local))
+            var box = e.Overlay != null ? (RectTransform)e.Overlay.transform : e.Hit;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(box, screen, cam, out Vector2 local))
                 return false;
 
-            Rect r = e.Hit.rect;
+            Rect r = box.rect;
             float band = Mathf.Clamp(Mathf.Min(r.width, r.height) * 0.25f, 3f, 14f);
             bool across = local.x <= r.xMin + band || local.x >= r.xMax - band;
             bool up = local.y <= r.yMin + band || local.y >= r.yMax - band;
@@ -578,7 +701,8 @@ namespace CarturUIHud
                 return 0f;
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen, cam, out Vector2 local))
                 return 0f;
-            Vector3 centre = parent.InverseTransformPoint(e.Hit.TransformPoint(e.Hit.rect.center));
+            var box = e.Overlay != null ? (RectTransform)e.Overlay.transform : e.Hit;
+            Vector3 centre = parent.InverseTransformPoint(box.TransformPoint(box.rect.center));
             return (local - (Vector2)centre).magnitude;
         }
 
@@ -615,6 +739,46 @@ namespace CarturUIHud
             img.sprite = s_white;
             img.color = EditBorder;
             img.raycastTarget = false;
+        }
+
+        /// <summary>
+        /// Sizes a piece's outline and grab area to what it actually draws. The outline used to be
+        /// the registered hit rect - for the inventory screen that is vanilla's old frame - and
+        /// Cartur's boards are other shapes, so the red boxes did not match the panels they belong
+        /// to (2026-10-03). The box is the bounds of every visible Graphic under the piece, the
+        /// outline's own excluded; with nothing visible it stays the hit rect.
+        /// </summary>
+        private static void FitOverlay(Element e)
+        {
+            if (e.Overlay == null || e.Move == null || e.Hit == null || !e.Overlay.activeInHierarchy)
+                return;
+            var rt = (RectTransform)e.Overlay.transform;
+            var c = new Vector3[4];
+            bool any = false;
+            Vector2 lo = Vector2.zero, hi = Vector2.zero;
+            foreach (Graphic g in e.Move.GetComponentsInChildren<Graphic>(false))
+            {
+                if (!g.enabled || g.color.a < 0.02f || g.transform.IsChildOf(rt))
+                    continue;
+                if (g is Image img && img.sprite == null && !(g is RawImage))
+                    continue;
+                g.rectTransform.GetWorldCorners(c);
+                for (int i = 0; i < 4; i += 2)
+                {
+                    Vector2 p = e.Hit.InverseTransformPoint(c[i]);
+                    lo = any ? Vector2.Min(lo, p) : p;
+                    hi = any ? Vector2.Max(hi, p) : p;
+                    any = true;
+                }
+            }
+            if (!any)
+            {
+                rt.offsetMin = rt.offsetMax = Vector2.zero;
+                return;
+            }
+            Rect r = e.Hit.rect;
+            rt.offsetMin = lo - r.min;
+            rt.offsetMax = hi - r.max;
         }
 
         private static void EnsureOverlay(Element e)
@@ -683,7 +847,7 @@ namespace CarturUIHud
 
         private static void Save(Element e)
         {
-            e.Entry.Value = Format(e.Move.anchoredPosition, e.Scale, e.Length, e.FrameScale, e.FrameOffset);
+            e.Entry.Value = Format(Pos(e), e.Scale, e.Length, e.FrameScale, e.FrameOffset);
         }
 
         private static string Format(Vector2 position, float scale, float length, float frameScale, Vector2 frameOffset) =>

@@ -53,6 +53,7 @@ namespace CarturUIHud
 
         private static Button s_tab;
         private static bool s_active;
+        internal static bool Active => s_active;
         private static readonly List<GameObject> s_rows = new List<GameObject>();
         private static readonly List<ItemDrop.ItemData> s_rowItems = new List<ItemDrop.ItemData>();
         private static readonly HashSet<string> s_priced = new HashSet<string>();
@@ -391,7 +392,15 @@ namespace CarturUIHud
                 // it. Without this line the two Rotvein bow styles register fine and are simply
                 // never listed, which is exactly how they presented: the loader logged
                 // "BowFineWood style is variant 1 of 2" and the tab still showed nothing.
-                || d.m_itemType == ItemDrop.ItemData.ItemType.Bow;
+                || d.m_itemType == ItemDrop.ItemData.ItemType.Bow
+                // Helmet, chest and legs. Like the right hand these carry no variant in
+                // VisEquipment (SetHelmetEquipped/SetChestEquipped/SetLegEquipped take a hash
+                // only), and Cartur's Weapon Styles reads the choice off the wearer's own m_variant
+                // - so it shows for the wearer only. Without these the Horned Helm and Verdigris
+                // Scale styles registered ("... style is variant 1 of 2") and were never listed.
+                || d.m_itemType == ItemDrop.ItemData.ItemType.Helmet
+                || d.m_itemType == ItemDrop.ItemData.ItemType.Chest
+                || d.m_itemType == ItemDrop.ItemData.ItemType.Legs;
         }
 
         /// <summary>
@@ -508,6 +517,10 @@ namespace CarturUIHud
             if (s_pane != null)
                 Object.Destroy(s_pane);
             s_pane = null;
+            // The cost boxes are children of the pane that just went, so what is left is a list
+            // of destroyed objects. Cleared here rather than relied on being null-checked.
+            s_costBoxes.Clear();
+            s_costReqs.Clear();
 
             Transform pane = gui != null ? Pane(gui) : null;
             ItemDrop.ItemData item = s_selected;
@@ -528,22 +541,32 @@ namespace CarturUIHud
             rt.sizeDelta = from.sizeDelta;
             rt.anchoredPosition = from.anchoredPosition;
 
-            // Nothing picked yet. The pane is still built, and carries only the serpent, so
-            // the tab opens with the art the crafting pane has instead of a bare hole. It is
-            // the same rect copied from the same vanilla pane, so it is the same size and in
-            // the same place as on Craft.
-            if (item == null || item.m_shared == null)
+            // On Cartur's crafting board the vanilla pane has been scaled (about 0.7) and split
+            // across three painted regions by CraftingBoard. Copying its anchors alone gave a
+            // full-size pane that ran over the dragon and the painted Craft button. So the pane
+            // takes the board's description region at the vanilla pane's scale, and the Change
+            // button and cost boxes go where vanilla's fitted ones are.
+            bool onBoard = CraftingBoard.DetailRegion(gui, out Rect detail);
+            if (onBoard)
             {
-                Inlays.Decorate(rt);
-                return;
+                rt.localScale = from.localScale;
+                rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+                rt.pivot = new Vector2(0f, 1f);
+                Vector3 s = rt.lossyScale;
+                rt.sizeDelta = new Vector2(detail.width / s.x, detail.height / s.y);
+                rt.position = new Vector3(detail.xMin, detail.yMax, rt.position.z);
             }
+
+            // Nothing picked yet: an empty pane.
+            if (item == null || item.m_shared == null)
+                return;
 
             string missing;
             bool afford = CanPay(item, out missing);
             bool changed = s_variant != item.m_variant;
 
-            float width = from.rect.width;
-            float height = from.rect.height;
+            float width = rt.rect.width;
+            float height = rt.rect.height;
 
             // Every size below is the Craft tab's own, read off the very components the
             // crafting pane draws with. They were written down here as 72, 24, 15 and 44 and
@@ -570,9 +593,15 @@ namespace CarturUIHud
                 ? icons[s_variant] : item.GetIcon();
 
             Picture(rt, preview, new Vector2(Pad, -Pad), iconSize);
-            Text(rt, Localize(item.m_shared.m_name), new Vector2(textLeft, -Pad),
+            // One line, shrinking to fit: "Bone Tower Shield" wrapped to two and ran into the
+            // text under it (audit, 2026-10-03).
+            TextMeshProUGUI title = Text(rt, Localize(item.m_shared.m_name), new Vector2(textLeft, -Pad),
                 width - textLeft - Pad, nameSize * 1.3f,
                 nameSize, 1f, TextAlignmentOptions.TopLeft, Gold);
+            title.textWrappingMode = TextWrappingModes.NoWrap;
+            title.enableAutoSizing = true;
+            title.fontSizeMax = nameSize;
+            title.fontSizeMin = nameSize * 0.6f;
 
             // Laid out from the BOTTOM up. The stats are as long as the item is complicated -
             // a shield with an enchantment runs past twenty lines - so the pieces under them
@@ -580,22 +609,38 @@ namespace CarturUIHud
             // told to truncate: a long tooltip now stops, where before it ran straight through
             // the style buttons.
             float costLine = bodySize * 1.6f;
+            float billHeight = ReqHeight(gui, costLine);
             float barHeight = BarHeight(gui);
             float buttonTop = 12f + buttonHeight;
             float costY = buttonTop + 14f;
-            float barY = costY + costLine + 10f;
+            // On the board the button and the cost boxes sit on their own painted regions below
+            // this pane, so the strip starts at the pane's bottom.
+            float barY = onBoard ? 6f : costY + billHeight + 10f;
             float stylesY = barY + barHeight + 6f;
             float headingY = stylesY + box + 6f;
             float textBottom = headingY + costLine + 10f;
 
-            Apply(gui, rt, changed && afford);
-            Text(rt, Cost(item), new Vector2(Pad, -(height - costY - costLine)), width - Pad * 2f,
-                costLine, bodySize, 1f,
-                TextAlignmentOptions.TopLeft, afford ? Color.white : Short);
+            GameObject apply = Apply(gui, rt, changed && afford);
+            Bill(gui, rt, item, -(height - costY - billHeight), billHeight, bodySize);
+            if (onBoard)
+            {
+                if (apply != null)
+                    Over(apply.transform, gui.m_craftButton.transform, Vector3.zero);
+                GameObject[] vanilla = gui.m_recipeRequirementList;
+                int n = vanilla != null ? vanilla.Length : 0;
+                for (int i = 0; i < s_costBoxes.Count && n > 0; i++)
+                {
+                    // Past vanilla's four, the row carries on at vanilla's own pitch.
+                    Transform at = vanilla[Mathf.Min(i, n - 1)].transform;
+                    Vector3 step = n > 1 ? vanilla[n - 1].transform.position - vanilla[n - 2].transform.position : Vector3.zero;
+                    Over(s_costBoxes[i].transform, at, step * Mathf.Max(0, i - n + 1));
+                }
+            }
             Styles(gui, rt, item, icons, ppu, -(height - stylesY - box), width, box, pitch, barHeight);
             Text(rt, StylesLabel, new Vector2(Pad, -(height - headingY - costLine)), width - Pad * 2f,
                 costLine, bodySize * 1.15f, 1f,
                 TextAlignmentOptions.TopLeft, Gold);
+            MistBox(rt, item, -(height - headingY - costLine), width, costLine, bodySize * 1.15f, ppu);
 
             // Vanilla's own builder, then vanilla's own localiser. GetTooltip hands back tokens
             // - $item_weight, $item_blockarmor - because the caller is expected to localise the
@@ -607,9 +652,23 @@ namespace CarturUIHud
             Text(rt, tooltip, new Vector2(Pad, -textTop), width - Pad * 2f, height - textTop - textBottom,
                 bodySize, 0.92f,
                 TextAlignmentOptions.TopLeft, null, TextOverflowModes.Truncate);
+        }
 
-            // Last, so it lands on top of everything this pane just drew.
-            Inlays.Decorate(rt);
+        /// <summary>
+        /// Lays a clone exactly over the vanilla piece it was cloned from - same world size and
+        /// place - so it inherits whatever CraftingBoard did to fit that piece on the art.
+        /// </summary>
+        private static void Over(Transform copy, Transform model, Vector3 offset)
+        {
+            var c = copy as RectTransform;
+            var m = model as RectTransform;
+            if (c == null || m == null || c.parent == null || c.parent.lossyScale.x <= 0f)
+                return;
+            c.anchorMin = c.anchorMax = new Vector2(0.5f, 0.5f);
+            c.pivot = m.pivot;
+            c.sizeDelta = m.rect.size;
+            c.localScale = Vector3.one * (m.lossyScale.x / c.parent.lossyScale.x);
+            c.position = m.position + offset;
         }
 
         /// <summary>
@@ -703,6 +762,70 @@ namespace CarturUIHud
                     BuildPane(InventoryGui.instance);
                 });
             }
+        }
+
+        // Cartur's Weapon Styles' Api, found on first use rather than at load: which of the two
+        // mods the chainloader starts first is not ours to rely on. Absent, there is no box.
+        private static bool s_mistLooked;
+        private static MethodInfo s_getMist, s_setMist;
+
+        /// <summary>
+        /// A Mist checkbox at the right of the Styles heading, for an item whose current style
+        /// has one - Weapon Styles decides that and holds the choice on the item. Free, and it
+        /// takes effect at once; the style strip is untouched.
+        /// </summary>
+        private static void MistBox(RectTransform pane, ItemDrop.ItemData item, float y, float width,
+            float side, float textSize, float ppu)
+        {
+            if (!s_mistLooked)
+            {
+                s_mistLooked = true;
+                s_getMist = AccessTools.Method("CarturWeaponStyles.Api:Mist");
+                s_setMist = AccessTools.Method("CarturWeaponStyles.Api:SetMist");
+            }
+            if (s_getMist == null || s_setMist == null)
+                return;
+            var state = s_getMist.Invoke(null, new object[] { item }) as bool?;
+            if (!state.HasValue)
+                return;
+            bool on = state.Value;
+
+            var go = new GameObject("mist", typeof(RectTransform), typeof(Image), typeof(Button));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(pane, false);
+            rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0f, 1f);
+            rt.sizeDelta = new Vector2(side, side);
+            rt.anchoredPosition = new Vector2(width - Pad - side, y);
+
+            var plate = go.GetComponent<Image>();
+            plate.sprite = AssetLoader.Piece("slot", ppu);
+            plate.type = Image.Type.Sliced;
+            plate.fillCenter = false;
+            go.GetComponent<Button>().targetGraphic = plate;
+
+            if (on)
+            {
+                var tick = new GameObject("tick", typeof(RectTransform), typeof(Image));
+                var tr = (RectTransform)tick.transform;
+                tr.SetParent(rt, false);
+                tr.anchorMin = Vector2.zero;
+                tr.anchorMax = Vector2.one;
+                tr.offsetMin = new Vector2(side * 0.28f, side * 0.28f);
+                tr.offsetMax = new Vector2(-side * 0.28f, -side * 0.28f);
+                var fill = tick.GetComponent<Image>();
+                fill.color = Gold;
+                fill.raycastTarget = false;
+            }
+
+            Text(pane, MistLabel, new Vector2(Pad, y), width - Pad * 2f - side - 8f, side,
+                textSize, 1f, TextAlignmentOptions.TopRight, Gold);
+
+            go.GetComponent<Button>().onClick.AddListener(delegate
+            {
+                s_setMist.Invoke(null, new object[] { Player.m_localPlayer, item, !on });
+                BuildPane(InventoryGui.instance);
+            });
         }
 
         /// <summary>
@@ -813,13 +936,13 @@ namespace CarturUIHud
         /// enabled and disabled look the Craft tab has, for free, and it follows a skin or a
         /// game update the same way vanilla's does.
         /// </summary>
-        private static void Apply(InventoryGui gui, RectTransform pane, bool live)
+        private static GameObject Apply(InventoryGui gui, RectTransform pane, bool live)
         {
             Button model = gui != null ? gui.m_craftButton : null;
             if (model == null)
             {
                 Log.LogWarning("no craft button to copy - no Change style button on this pane");
-                return;
+                return null;
             }
 
             var go = Object.Instantiate(model.gameObject, pane);
@@ -858,7 +981,11 @@ namespace CarturUIHud
             foreach (TMP_Text label in go.GetComponentsInChildren<TMP_Text>(true))
             {
                 if (label != null)
+                {
                     label.text = ChangeLabel;
+                    // Off on the model when the board paints "Craft"; on for ours.
+                    label.enabled = true;
+                }
             }
 
             // The clone brings the craft button's hover text with it, which would say the wrong
@@ -871,11 +998,12 @@ namespace CarturUIHud
             if (button == null)
             {
                 Log.LogWarning("the craft button has no Button on its root - no Change style button");
-                return;
+                return go;
             }
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(Change);
             button.interactable = live;
+            return go;
         }
 
         /// <summary>
@@ -925,7 +1053,7 @@ namespace CarturUIHud
             image.raycastTarget = false;
         }
 
-        private static void Text(RectTransform parent, string text, Vector2 at, float width, float height,
+        private static TextMeshProUGUI Text(RectTransform parent, string text, Vector2 at, float width, float height,
             float size, float bright, TextAlignmentOptions align, Color? colour = null,
             TextOverflowModes overflow = TextOverflowModes.Overflow)
         {
@@ -947,6 +1075,7 @@ namespace CarturUIHud
             label.color = colour.HasValue ? colour.Value : new Color(bright, bright, bright, 1f);
             label.overflowMode = overflow;
             label.raycastTarget = false;
+            return label;
         }
 
         private const float StyleBox = 52f;
@@ -957,6 +1086,7 @@ namespace CarturUIHud
         private const float Pad = 16f;
         private const string StylesLabel = "Styles";
         private const string ChangeLabel = "Change style";
+        private const string MistLabel = "Mist";
         private static readonly Color Gold = new Color(1f, 0.79f, 0.29f, 1f);
         private static readonly Color Short = new Color(0.85f, 0.35f, 0.3f, 1f);
 
@@ -1033,6 +1163,159 @@ namespace CarturUIHud
             }
             return text.Length > 0 ? text.ToString() : "free";
         }
+
+        // ---- the cost, drawn the way the Craft tab draws it --------------------------------
+
+        // One cloned requirement box per material, and the requirement each one shows. The
+        // boxes are children of the pane, so rebuilding the pane destroys them; these lists are
+        // only what the per-frame repaint walks.
+        private static readonly List<GameObject> s_costBoxes = new List<GameObject>();
+        private static readonly List<Piece.Requirement> s_costReqs = new List<Piece.Requirement>();
+
+        /// <summary>
+        /// The price as the crafting panel's own ingredient boxes, filled by the panel's own
+        /// method - not a line of text saying "2 Wood, 1 Leather scraps".
+        ///
+        /// InventoryGui.SetupRequirement is public and static (read off assembly_valheim), and
+        /// it is the whole of what makes an ingredient look like an ingredient: the item's icon
+        /// into "res_icon", its localised name into "res_name", the amount into "res_amount",
+        /// the UITooltip on the box, and the red/white blink at Mathf.Sin(Time.time * 10f) when
+        /// the pack is short. Calling it means none of that is written here, and it also means
+        /// Cartur's Craft From Containers runs its own postfix on it - so a style prices itself
+        /// against the chests in range, in the same have/need text and the same yellow flash as
+        /// a craft, with nothing about containers in this file.
+        ///
+        /// The boxes are clones of m_recipeRequirementList[0], which is the very object the
+        /// Craft tab fills, so the plate, the icon size and the fonts are that tab's. Vanilla's
+        /// array is four long and a bill can be shorter or longer; cloning one model as many
+        /// times as there are materials is what lifts that limit.
+        /// </summary>
+        private static void Bill(InventoryGui gui, RectTransform pane, ItemDrop.ItemData item,
+            float y, float height, float bodySize)
+        {
+            s_costBoxes.Clear();
+            s_costReqs.Clear();
+
+            GameObject model = ReqModel(gui);
+            if (model == null)
+            {
+                // Nothing to borrow - the plain line this pane drew before. Not a crash, and not
+                // an empty strip where the price should be.
+                string missing;
+                bool afford = CanPay(item, out missing);
+                Text(pane, Cost(item), new Vector2(Pad, y), pane.rect.width - Pad * 2f, height,
+                    bodySize, 1f, TextAlignmentOptions.TopLeft, afford ? Color.white : Short);
+                return;
+            }
+
+            var from = (RectTransform)model.transform;
+            Vector2 step = ReqPitch(gui, from.rect.width);
+            int drawn = 0;
+            foreach (Piece.Requirement req in Requirements(item))
+            {
+                // SetupRequirement reaches straight through m_resItem.m_itemData for the icon and
+                // the name, and a requirement prefab nothing has woken yet has none - the same
+                // null that threw inside Price. Such a material is left out of the row rather
+                // than taking the pane down with it.
+                if (req.m_resItem == null || req.m_resItem.m_itemData == null
+                    || req.m_resItem.m_itemData.m_shared == null)
+                    continue;
+
+                GameObject go = Object.Instantiate(model, pane);
+                go.name = "cost" + drawn;
+                go.SetActive(true);
+
+                var rt = (RectTransform)go.transform;
+                rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+                rt.pivot = new Vector2(0f, 1f);
+                rt.sizeDelta = from.rect.size;
+                rt.anchoredPosition = new Vector2(Pad, y) + step * drawn;
+
+                s_costBoxes.Add(go);
+                s_costReqs.Add(req);
+                drawn++;
+            }
+
+            Paint();
+        }
+
+        private static GameObject ReqModel(InventoryGui gui) =>
+            gui != null && gui.m_recipeRequirementList != null && gui.m_recipeRequirementList.Length > 0
+                ? gui.m_recipeRequirementList[0] : null;
+
+        /// <summary>How tall one ingredient box is, so the pane's bottom-up layout can reserve it.</summary>
+        private static float ReqHeight(InventoryGui gui, float fallback)
+        {
+            GameObject model = ReqModel(gui);
+            var rt = model != null ? model.transform as RectTransform : null;
+            return rt != null && rt.rect.height > 1f ? rt.rect.height : fallback;
+        }
+
+        /// <summary>
+        /// The gap from one of vanilla's boxes to the next, taken as a vector from the two it
+        /// already has on screen. Read rather than written down, and read as a vector, so the row
+        /// runs whichever way the crafting panel's own row runs.
+        /// </summary>
+        private static Vector2 ReqPitch(InventoryGui gui, float boxWidth)
+        {
+            GameObject[] list = gui.m_recipeRequirementList;
+            if (list != null && list.Length > 1 && list[0] != null && list[1] != null)
+            {
+                var a = list[0].transform as RectTransform;
+                var b = list[1].transform as RectTransform;
+                if (a != null && b != null)
+                {
+                    Vector2 step = b.anchoredPosition - a.anchoredPosition;
+                    if (step.sqrMagnitude > 1f)
+                        return step;
+                }
+            }
+            return new Vector2(boxWidth + StyleGap, 0f);
+        }
+
+        /// <summary>
+        /// Repainted every frame, at vanilla's own cadence and from vanilla's own place:
+        /// InventoryGui.UpdateRecipe runs from Update and is what calls SetupRequirementList,
+        /// which is where the blink comes from. A box painted once would show the right numbers
+        /// and never flash.
+        ///
+        /// Quality 1 and a multiplier of 1: Requirements already bakes the final amount into
+        /// m_amount with m_amountPerLevel 0, so there is nothing for GetAmount to scale.
+        /// </summary>
+        [HarmonyPatch(typeof(InventoryGui), "UpdateRecipe")]
+        [HarmonyPostfix]
+        private static void RepaintBill() => Paint();
+
+        private static void Paint()
+        {
+            Player player = Player.m_localPlayer;
+            if (!s_active || player == null || player.GetInventory() == null || s_costBoxes.Count == 0)
+                return;
+
+            for (int i = 0; i < s_costBoxes.Count; i++)
+            {
+                GameObject go = s_costBoxes[i];
+                if (go == null)
+                    continue;
+                try
+                {
+                    InventoryGui.SetupRequirement(go.transform, s_costReqs[i], player, true, 1, 1);
+                }
+                catch (System.Exception e)
+                {
+                    // Said once. Another mod's postfix on SetupRequirement throwing is its
+                    // business, and this runs every frame - a warning per frame would bury the
+                    // log it is meant to be read from.
+                    if (s_paintFailed == null)
+                    {
+                        s_paintFailed = e.GetType().Name;
+                        Log.LogWarning("style cost boxes: " + e.Message);
+                    }
+                }
+            }
+        }
+
+        private static string s_paintFailed;
 
         /// <summary>
         /// The price as the game's own requirement list, so it can be handed to the game's own

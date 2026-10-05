@@ -203,6 +203,9 @@ namespace CarturUIHud
             foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true))
                 Recolour(text);
 
+            foreach (Slider slider in root.GetComponentsInChildren<Slider>(true))
+                SliderSkin.Dress(slider);
+
             Log.LogInfo(label + ": " + images + " images, " + states + " button states skinned");
         }
 
@@ -358,6 +361,10 @@ namespace CarturUIHud
 
                 Knots(img);
             }
+            // Window frames go on Cartur's boards where nothing else has fitted one. Last, so the
+            // colour it keeps for a frame that is not boarded is the finished one.
+            if (e.Piece == "panel_auto" || e.Piece == "panel_ornate")
+                AutoBoard.Attach(img);
             return true;
         }
 

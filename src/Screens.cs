@@ -65,6 +65,29 @@ namespace CarturUIHud
             Skin.Apply(__instance.m_worldListElement?.transform, "world row prefab");
         }
 
+        // Windows the pilot's missing-panels check found still on vanilla wood (2026-10-04). Owners
+        // read off the assembly: ZNet holds the password and connecting dialogs as fields,
+        // ConnectPanel has only Start, the barber's PlayerCustomizaton only OnEnable, TextInput Awake.
+        [HarmonyPatch(typeof(ZNet), "Awake")]
+        [HarmonyPostfix]
+        private static void Dialogs(ZNet __instance)
+        {
+            Skin.Apply(__instance.m_passwordDialog, "password dialog");
+            Skin.Apply(__instance.m_connectingDialog, "connecting dialog");
+        }
+
+        [HarmonyPatch(typeof(ConnectPanel), "Start")]
+        [HarmonyPostfix]
+        private static void Connection(ConnectPanel __instance) => Skin.Apply(__instance.transform, "connection panel");
+
+        [HarmonyPatch(typeof(PlayerCustomizaton), "OnEnable")]
+        [HarmonyPostfix]
+        private static void Barber(PlayerCustomizaton __instance) => Skin.Apply(__instance.transform, "barber");
+
+        [HarmonyPatch(typeof(TextInput), "Awake")]
+        [HarmonyPostfix]
+        private static void Text(TextInput __instance) => Skin.Apply(__instance.transform, "text input");
+
         // RadialBase is the radial menu itself - it has no subclasses in the assembly, so this
         // one component is the whole of it. Awake is 27 instructions and its parts (element
         // container, cursor, highlighter) are serialized, so they are there to walk.

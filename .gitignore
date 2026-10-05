@@ -18,3 +18,11 @@ tools/art/out/
 # Source video for the sleep screen. Hundreds of MB of generated .mp4 that git
 # would carry forever; kept on disk, out of history.
 src/Assets/sleep/
+
+# Grok renders: every candidate board, including the rejected ones. The picks are copied into
+# tools/art/refs/, so only what regenerates them is kept: guides, sheets, prompts and gen.mjs.
+tools/art/grok/*
+!tools/art/grok/guide_*
+!tools/art/grok/sheet_*
+!tools/art/grok/prompt_*
+!tools/art/grok/gen.mjs

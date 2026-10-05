@@ -1,0 +1,6 @@
+Game UI asset sheet for a Norse fantasy game (Valheim style). Keep the pure white background everywhere outside the painted parts. Keep the top references as they are.
+Paint a NEW SLIDER that matches the style references at the top: dark carved wood, aged bronze rims, Norse knotwork, subtle teal rune glow.
+1. In the long box labelled NEW SLIDER TRACK: a horizontal recessed groove of dark wood inside a thin aged-bronze rim with small knotwork end caps. Fill the box exactly, flat front view, no perspective.
+2. In the square box labelled NEW SLIDER KNOB: a round aged-bronze medallion with a carved Norse knot or rune in the centre, slight teal glow. Fill the box, flat front view.
+3. In the thin box labelled FILLED PART OF TRACK: the same groove but filled with a warm amber-gold glowing inlay, to show the chosen amount. Fill the box exactly.
+No text inside the painted parts. No drop shadows onto the white. Clean edges on white.

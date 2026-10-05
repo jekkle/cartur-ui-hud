@@ -1,0 +1,5 @@
+Edit this image. It is a dark carved Norse game UI panel: a thin aged bronze knotwork border with raven heads at the top corners, a medallion on the top edge, a diamond on the bottom edge, rune strips on the sides, and a grid of 8 x 4 recessed square cells on dark weathered wood.
+
+Change exactly one thing: make the panel TALLER at the top by adding a plain band of the same dark weathered wood planks between the top border and the first row of cells, about as tall as one row of cells. The band is completely EMPTY - no boxes, no plates, no carvings, no words. The top border, ravens and medallion move up with the top edge; the grid of 8 x 4 cells stays exactly as it is, same size, same count, same spacing; the side borders simply run longer.
+
+Keep everything else identical. No words. Plain flat pure white background outside the panel, no shadow.

@@ -44,12 +44,23 @@ namespace CarturUIHud
             // The prefab's own positions are the fallbacks, so a fresh config lands exactly
             // where vanilla put things. Container is a child of Player in the prefab, so for
             // now it rides along when Player moves and can be nudged on top of that.
+            // Movable and scalable in edit mode on the boards too - Cartur places every panel
+            // himself (2026-10-03). InventoryBoard.Align runs once only, from its Follower, to move
+            // a bag still at the old default under the hotbar; after that edit mode owns the spot.
             Register("player", "Inventory", __instance.m_player);
             Register("container", "Container", __instance.m_container);
             Register("crafting", "Crafting", __instance.m_crafting);
             Register("info", "Info", __instance.m_info);
 
             Room(__instance);
+            // Cartur's full crafting board (2026-10-04) carries the info panel's header in the same
+            // picture; the old pair - crafting board plus banner - stays as the fallback.
+            bool full = AssetLoader.Board("craftingfull") != null;
+            Dress(__instance.m_crafting, full ? "craftingfull" : "crafting", "crafting", full ? 296f : 0f);
+            CraftingBoard.Fit(__instance);
+            if (!full)
+                Dress(__instance.m_info, "banner");
+            CraftingBoard.FitInfo(__instance);
             Log.LogInfo("inventory skinned, 4 panels registered for edit mode");
         }
 
@@ -77,6 +88,51 @@ namespace CarturUIHud
                 return;
             Vector2 size = panel.sizeDelta;
             panel.sizeDelta = new Vector2(size.x, size.y + HotbarRow.RowShift);
+        }
+
+        /// <summary>
+        /// Puts one of Cartur's boards (2026-10-03) behind a panel in place of its old frame: as
+        /// wide as the panel, as tall as the art's own aspect makes it, top edges together. The
+        /// frame's Image is switched off but its object stays - edit mode hit-tests its rect.
+        /// Positions and sizes are his to set in edit mode; this is only where they start.
+        /// </summary>
+        private static void Dress(RectTransform panel, string board, string name = null, float headerPx = 0f)
+        {
+            Texture2D tex = AssetLoader.Board(board);
+            if (panel == null || tex == null)
+                return;
+            Transform bkg = panel.Find("Bkg");
+            Image old = bkg != null ? bkg.GetComponent<Image>() : null;
+            if (old != null)
+                old.enabled = false;
+
+            // Found again rather than made again: a second Awake on the same panel stacked a second board.
+            string goName = "CarturUI_Board_" + (name ?? board);
+            if (panel.Find(goName) != null)
+                return;
+            var go = new GameObject(goName, typeof(RectTransform), typeof(Image));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(panel, false);
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            float w = panel.rect.width + 40f;   // the old frame stood 20 proud of the panel
+            rt.sizeDelta = new Vector2(w, w * tex.height / tex.width);
+            // A header painted above the part that fits the panel rises above the panel's top.
+            rt.anchoredPosition = new Vector2(0f, 20f + headerPx * w / tex.width);
+            rt.SetAsFirstSibling();
+
+            Image img = go.GetComponent<Image>();
+            img.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f,
+                                       0, SpriteMeshType.FullRect);
+            img.type = Image.Type.Simple;
+            img.raycastTarget = false;
+            img.material = null;   // full brightness - see valheim-litpanel-material
+
+            // The banner is rendered lighter and warmer than the crafting board it sits on top of.
+            // Measured on both PNGs: crafting/banner is 0.90/0.91/0.97 on the bronze and
+            // 0.81/0.87/0.87 on the wood; this is the average, so neither drifts far.
+            if (board == "banner")
+                img.color = new Color(0.85f, 0.89f, 0.92f, 1f);
         }
 
         private static void Register(string key, string label, RectTransform panel)
@@ -252,7 +308,9 @@ namespace CarturUIHud
             if (!slots.gameObject.activeInHierarchy)
                 return false;            // it exists but is not up yet - wait a frame
 
-            float panelRight = panel.rect.xMax;
+            // The board stands proud of the panel, so the column clears its right edge rather
+            // than the panel's.
+            float panelRight = InventoryBoard.RightIn(panel);
             float left = float.MaxValue;
             var corners = new Vector3[4];
             foreach (RectTransform cell in slots.GetComponentsInChildren<RectTransform>(false))
@@ -267,8 +325,11 @@ namespace CarturUIHud
                 return false;            // no cells yet
 
             float measured = left - panelRight;
+            // Cartur's bag board reaches past the equipment panel's left edge, so there may be no
+            // gap at all - the column then takes vanilla spacing and he places it in edit mode.
+            // Waiting for a gap that cannot come is what left the can and Sort unboxed.
             if (measured <= MinBoxWidth)
-                return false;
+                return true;
 
             Log.LogInfo("side column gap: panel right " + panelRight.ToString("0")
                 + " to equipment cells left " + left.ToString("0") + " = " + measured.ToString("0"));
@@ -339,17 +400,34 @@ namespace CarturUIHud
                 box = (RectTransform)go.transform;
                 box.SetParent(parent, false);
 
-                // The thin rule, not the ornate panel: a 40-unit corner knot on a 64-unit box
-                // is all corner and no box. Cartur's call - the small panels take the border
-                // and leave the knotwork to the big ones.
+                // Cartur's square button board (2026-10-03) when it is there, else the thin rule:
+                // a 40-unit corner knot on a 64-unit box is all corner and no box.
                 Image frame = go.GetComponent<Image>();
-                frame.sprite = AssetLoader.Piece("panel_thin", Ppu(parent));
+                Sprite button = ButtonFrame(Ppu(parent));
+                frame.sprite = button != null ? button : AssetLoader.Piece("panel_thin", Ppu(parent));
                 frame.type = Image.Type.Sliced;
                 frame.color = Color.white;
                 frame.raycastTarget = false;
+                if (button != null)
+                {
+                    frame.material = null;   // full brightness - see valheim-litpanel-material
+                    // Down to the equipment board's wood beside it: measured in game, box wood
+                    // RGB 53/42/33 against the board's 16-23, so 0.4 (Cartur: "need to be darker").
+                    frame.color = new Color(ButtonShade, ButtonShade, ButtonShade, 1f);
+                    frame.pixelsPerUnitMultiplier = ButtonBorderPx / ButtonCornerUnits;
+                }
             }
 
-            box.anchorMin = box.anchorMax = new Vector2(1f, 0.5f);
+            // Anchored to the column's CENTRE, not its right edge.
+            //
+            // With anchor (1, 0.5), a centre pivot and position.x of 0, every box was centred on
+            // the column's right edge - so the four boxes sat half a column-width to the right of
+            // the column that owns them, hugging the equipment panel instead of sitting in the
+            // gap the column was measured to fill. The edit-mode outline is drawn from the column
+            // rect, so it looked like the outline was offset to the left when in fact it was the
+            // only part in the right place. A container whose contents fall outside it is the bug;
+            // the outline was the symptom that showed it.
+            box.anchorMin = box.anchorMax = new Vector2(0.5f, 0.5f);
             box.pivot = new Vector2(0.5f, 0.5f);
             box.sizeDelta = new Vector2(width, BoxHeight);
             box.anchoredPosition = position;
@@ -426,6 +504,27 @@ namespace CarturUIHud
                 text.alignment = TMPro.TextAlignmentOptions.Center;
                 text.color = Gold;
             }
+        }
+
+        // The button board as a 9-slice. Its corner knots reach 150 px in (measured on
+        // board_button.png, 627x644), so that is the border: the knots stay whole and only the
+        // plain rails and the wood between them stretch to the box. Drawn so a corner is 14 units.
+        private const float ButtonBorderPx = 150f;
+        private const float ButtonCornerUnits = 14f;
+        private const float ButtonShade = 0.4f;
+        private static Sprite s_button;
+
+        private static Sprite ButtonFrame(float ppu)
+        {
+            if (s_button != null)
+                return s_button;
+            Texture2D tex = AssetLoader.Board("button");
+            if (tex == null)
+                return null;
+            s_button = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), ppu,
+                0, SpriteMeshType.FullRect, new Vector4(ButtonBorderPx, ButtonBorderPx, ButtonBorderPx, ButtonBorderPx));
+            s_button.name = "cartur_board_button";
+            return s_button;
         }
 
         private static float Ppu(Transform t)

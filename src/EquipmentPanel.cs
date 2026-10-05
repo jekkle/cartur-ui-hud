@@ -20,30 +20,30 @@ namespace CarturUIHud
     ///
     /// Layout, and where each number came from
     /// ---------------------------------------
-    /// The panel is one piece of art - Assets/equipment_panel.png, 784x1168 - with the seven
-    /// slot boxes and their names painted into it. So the layout is not chosen here, it is
-    /// measured off that file and the cells are put where the boxes already are.
+    /// The panel is one piece of art - Cartur's board, Assets/board_equipment.png, 1214x1511
+    /// (his EAQS panel, 2026-10-04, cut from white by tools/art/boards.py) - with the seven
+    /// equipment boxes, the three quick slot boxes and an open middle for the character preview
+    /// painted into it. So the layout is not chosen here, it is measured off that file and the
+    /// cells are put where the boxes already are.
     ///
-    /// Each box's gold outline was taken by bounding box. Centres and sizes, in source px:
+    /// Boxes read off the art and checked by drawing them back onto it. They are 162 px
+    /// squares; centres in source px:
     ///
-    ///     Head      (365.5, 164.0)   140 x 137
-    ///     Shoulder  (232.5, 373.5)   140 x 136
-    ///     Shield    (495.0, 373.5)   139 x 136
-    ///     Chest     (365.0, 574.0)   139 x 137
-    ///     Legs      (365.0, 775.5)   139 x 136
-    ///     Utility   (228.0, 976.0)   139 x 135
-    ///     Trinket   (496.5, 975.5)   140 x 136
+    ///     Helmet  (177, 552.5)    Shoulder (cape)    (1036, 479)
+    ///     Chest   (177, 761.5)    Shield             (1036, 686.5)
+    ///     Legs    (177, 971)      Utility (belt)     (1036, 886.5)
+    ///                             Trinket (necklace) (1036, 1077)
+    ///     Quick   (424, 1290)  (607.5, 1290)  (792.5, 1290)
     ///
-    /// The panel keeps the height it already had - Cartur asked to hold that when he revised
-    /// the art - so the scale is fixed by the panel's height rather than by the cell:
-    /// 545.35 / 1125. The art's proportions changed slightly with the revision (734x1125
-    /// against the old 784x1168), so holding the height means the panel stands 356 units wide
-    /// where it stood 366. A box comes out at 67.6 units and the cell inside it stays vanilla's
-    /// 64, which leaves the painted outline standing just clear of the item.
-    ///
-    /// The art also paints the slot names, so the cell's own label is switched off, and it
-    /// paints the box, so the cell's own plate is switched off too - two boxes inside each
-    /// other is the thing this art was picked to avoid. The hover tint is kept.
+    /// The scale is set so a box comes out at 66 units, just clear of vanilla's 64-unit cell.
+        ///
+    /// The art paints each box and an outline of what goes in it, so the cell's own label and
+    /// plate are switched off - two boxes inside each other is the thing this art avoids.
+    /// The hover tint is kept.
+        ///
+    /// The quick slots live here now, in the board's QUICK SLOTS boxes, as ordinary cells.
+    /// The HUD's food diamonds only show what is in them (Cartur, 2026-10-03); they used to
+    /// host these cells as invisible drop targets.
     ///
     /// The panel's resting place is the right-hand edge of the inventory panel, and it is
     /// registered with HudLayout, so moving or scaling it is a drag in edit mode rather than
@@ -62,40 +62,53 @@ namespace CarturUIHud
         private const float Margin = 16f;
 
         // The art, and the one measurement everything else comes off. See the class comment.
-        private const float ArtWidth = 734f;
-        private const float ArtHeight = 1125f;
+        // Board replaced 2026-10-04 with his new EAQS panel (Downloads/eaqs.png cut from white,
+        // 1214x1511; the old one is tools/art/out/old/board_equipment_2026-10-03.png). Boxes read
+        // off the art and drawn back on it to check: 162 px squares, centres in the table below.
+        private const float ArtWidth = 1214f;
+        private const float ArtHeight = 1511f;
+        private const float BoxPx = 162f;
+        private const float BoxUnits = 66f;
 
-        // The height the panel has had since the first cut of it, kept across the art revision
-        // because that is what Cartur asked to hold. Width follows the new art's proportions.
-        private const float PanelHeight = 545.35f;
-        private const float Scale = PanelHeight / ArtHeight;    // 0.4847
-        private const float PanelWidth = ArtWidth * Scale;      // 355.8
+        private const float Scale = BoxUnits / BoxPx;           // 0.4074
+        private const float PanelHeight = ArtHeight * Scale;    // 615.6
+        private const float PanelWidth = ArtWidth * Scale;      // 494.6
+
+        /// <summary>The open middle of the board, in source px - where the character preview stands.</summary>
+        internal static readonly Rect FigurePx = new Rect(360f, 375f, 500f, 810f);
+        internal static float ArtScale => Scale;
 
         // Where each box sits in the art, in source pixels from its top-left corner. Measured,
         // not placed - the table in the class comment is this table.
         private static readonly Dictionary<string, Vector2> s_cells = new Dictionary<string, Vector2>
         {
-            { "Helmet",   new Vector2(365.5f, 164.0f) },
-            { "Shoulder", new Vector2(232.5f, 373.5f) },
-            { "Shield",   new Vector2(495.0f, 373.5f) },
-            { "Chest",    new Vector2(365.0f, 574.0f) },
-            { "Legs",     new Vector2(365.0f, 775.5f) },
-            { "Utility",  new Vector2(228.0f, 976.0f) },
-            { "Trinket",  new Vector2(496.5f, 975.5f) },
+            { "Helmet",   new Vector2(177f, 552.5f) },
+            { "Chest",    new Vector2(177f, 761.5f) },
+            { "Legs",     new Vector2(177f, 971f) },
+            { "Shoulder", new Vector2(1036f, 479f) },
+            { "Shield",   new Vector2(1036f, 686.5f) },
+            { "Utility",  new Vector2(1036f, 886.5f) },
+            { "Trinket",  new Vector2(1036f, 1077f) },
+        };
+
+        private static readonly Vector2[] s_quickCells =
+        {
+            new Vector2(424f, 1290f), new Vector2(607.5f, 1290f), new Vector2(792.5f, 1290f),
         };
 
         // The same seven as a plain grid, for the gamepad. It is a map of which slot is
-        // left/right/above/below which, not a picture of the panel - the art's centre column
-        // is column 1, its pairs sit either side. Step() scans past the gaps.
+        // left/right/above/below which, not a picture of the panel: the board's left column is
+        // column 0, its right column is column 2, the figure between them is empty. Step()
+        // scans past the gaps.
         private static readonly Dictionary<string, Vector2> s_padCells = new Dictionary<string, Vector2>
         {
-            { "Helmet",   new Vector2(1f, 0f) },
-            { "Shoulder", new Vector2(0f, 1f) },
+            { "Helmet",   new Vector2(0f, 0f) },
+            { "Chest",    new Vector2(0f, 1f) },
+            { "Legs",     new Vector2(0f, 2f) },
+            { "Shoulder", new Vector2(2f, 0f) },
             { "Shield",   new Vector2(2f, 1f) },
-            { "Chest",    new Vector2(1f, 2f) },
-            { "Legs",     new Vector2(1f, 3f) },
-            { "Utility",  new Vector2(0f, 4f) },
-            { "Trinket",  new Vector2(2f, 4f) },
+            { "Utility",  new Vector2(2f, 2f) },
+            { "Trinket",  new Vector2(2f, 3f) },
         };
 
         // m_elements is private in the stock DLLs. One lookup, null-checked at every use.
@@ -214,7 +227,7 @@ namespace CarturUIHud
             // hangs off the end of the grid root.
             __instance.m_gridRoot?.SetSizeWithCurrentAnchors(
                 RectTransform.Axis.Vertical,
-                Slots.VisibleRows * __instance.m_elementSpace + HotbarRow.RowShift);
+                HotbarRow.GridHeight(__instance));
 
             RectTransform panel = Panel(gui);
             RectTransform hidden = Hidden(gui);
@@ -235,9 +248,14 @@ namespace CarturUIHud
                 }
                 if (slot.Kind == Slots.Kind.Quick)
                 {
-                    // The quick slots are the food diamonds on the HUD now - see QuickSlots.
-                    // There is no quick slot row in the inventory any more.
-                    QuickSlots.Host(slot.Index, element);
+                    // Into the board's QUICK SLOTS boxes. The HUD diamonds only display them.
+                    if (slot.Index >= 0 && slot.Index < s_quickCells.Length)
+                    {
+                        Seat(element, panel, s_quickCells[slot.Index]);
+                        KeyLabel(element.transform.Find("binding") as RectTransform, QuickSlots.KeyText(slot.Index));
+                    }
+                    else
+                        Park(element.gameObject, hidden);
                     continue;
                 }
                 if (slot.Kind == Slots.Kind.Quiver)
@@ -329,6 +347,25 @@ namespace CarturUIHud
         }
 
         /// <summary>The quiver strip is still a plain row of cells at a fixed pitch.</summary>
+        // A quick slot's hotkey letter, in the middle of its square (Cartur, 2026-10-03; first
+        // asked bottom-centre, where it sat on the stack count). Seat switches the binding label off for the equipment boxes; the quick
+        // boxes carry no painted letter, so it comes back here.
+        private static void KeyLabel(RectTransform binding, string key)
+        {
+            TMP_Text label = binding != null ? binding.GetComponent<TMP_Text>() : null;
+            if (label == null || string.IsNullOrEmpty(key))
+                return;
+            binding.gameObject.SetActive(true);
+            label.enabled = true;
+            label.text = key;
+            label.alignment = TextAlignmentOptions.Center;
+            label.textWrappingMode = TextWrappingModes.NoWrap;
+            binding.anchorMin = binding.anchorMax = new Vector2(0.5f, 0.5f);
+            binding.pivot = new Vector2(0.5f, 0.5f);
+            binding.anchoredPosition = Vector2.zero;
+            binding.sizeDelta = new Vector2(30f, 24f);
+        }
+
         private static void SeatInStrip(InventoryElement element, RectTransform strip, int index, string label)
         {
             if (strip == null)
@@ -461,10 +498,12 @@ namespace CarturUIHud
         /// </summary>
         private static void Art(RectTransform parent, float ppu)
         {
-            Sprite art = AssetLoader.EquipmentPanel;
+            Texture2D tex = AssetLoader.Board("equipment");
+            Sprite art = tex == null ? null : Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height),
+                new Vector2(0.5f, 0.5f), ppu, 0, SpriteMeshType.FullRect);
             if (art == null)
             {
-                Log.LogWarning("equipment_panel.png missing - falling back to the plain panel");
+                Log.LogWarning("board_equipment.png missing - falling back to the plain panel");
                 Frame(parent, ppu);
                 return;
             }
@@ -483,6 +522,7 @@ namespace CarturUIHud
             image.type = Image.Type.Simple;
             image.preserveAspect = false;   // the rect is already the art's aspect, by Scale
             image.raycastTarget = false;
+            image.material = null;          // full brightness - see valheim-litpanel-material
         }
 
         private static void Frame(RectTransform parent, float ppu)

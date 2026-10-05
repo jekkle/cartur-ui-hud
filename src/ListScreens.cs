@@ -37,5 +37,25 @@ namespace CarturUIHud
             Skin.Apply(__instance.transform, "compendium");
             Skin.Apply(__instance.m_elementPrefab?.transform, "compendium row prefab");
         }
+
+        /// <summary>
+        /// The compendium's selected entry is a solid orange bar; every other list here selects in a
+        /// see-through gold (review, 2026-10-04). FillTextList builds the rows, each with a child
+        /// "selected" it switches on for the open entry (read off the IL), so that child is recoloured.
+        /// </summary>
+        [HarmonyPatch(typeof(TextsDialog), "FillTextList")]
+        [HarmonyPostfix]
+        private static void TextsSelection(TextsDialog __instance)
+        {
+            if (__instance.m_listRoot == null)
+                return;
+            foreach (UnityEngine.Transform row in __instance.m_listRoot)
+                foreach (UnityEngine.UI.Image img in row.GetComponentsInChildren<UnityEngine.UI.Image>(true))
+                    if (img.name == "selected")
+                    {
+                        img.sprite = null;
+                        img.color = CraftingBoard.Selection;
+                    }
+        }
     }
 }

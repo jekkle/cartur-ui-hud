@@ -1,0 +1,5 @@
+Redraw this grey layout guide as a finished dark carved Norse game UI storage panel: thin aged bronze Celtic knotwork border, raven heads with glowing teal eyes at the two top corners, a small round triangle-knot medallion centred on the top edge, a small diamond centred on the bottom edge, short glowing teal rune strips on the left and right rails, dark weathered wood planks.
+
+This is a precise UI layout: every grey shape becomes one element at EXACTLY the same position, size and proportion - measure them. The dark grey frame is the thin border. The mid-grey bar at the top is a recessed title plate. Each light grey square is one recessed square cell with a thin bronze rim. Do not add any element that is not in the guide, do not drop any, do not merge any, do not move any. Keep the empty margins where the guide has them.
+
+Every element is EMPTY: no words, no letters, no icons anywhere. Same outer rectangle as the guide. Plain flat pure white background outside the panel, no shadow.

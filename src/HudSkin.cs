@@ -102,9 +102,23 @@ namespace CarturUIHud
         private const float BlinkSpeed = 2.5f;
         private static readonly Color LowFoodDim = new Color(0.65f, 0.10f, 0.10f, 0.75f);
         private static readonly Color LowFoodBright = new Color(1f, 0.25f, 0.20f, 1f);
-        // Outline thickness on the key letter, in SDF units. Wide enough to separate 14pt
+        // Outline thickness on the key letter, in SDF units. Wide enough to separate the
         // glyphs from a busy icon, short of the width that fills in the counters of a B.
         private const float KeyOutline = 0.15f;
+
+        /// <summary>
+        /// The key letter. 14 at first, raised a point on Cartur's read that
+        /// Z, V and B were hard to pick out; they were already bold, so the size is the only
+        /// thing left to give them.
+        /// </summary>
+        private const float KeyFontSize = 15f;
+
+        /// <summary>
+        /// A nudge up off the bottom bevel for the Eat/countdown text. Cartur's eye, not a
+        /// measurement: mirroring the key exactly put it lower than he wanted it.
+        /// </summary>
+        private const float TimerLift = 6f;
+
         /// <summary>The key letter's own line height.</summary>
         private const float KeyHeight = 20f;
 
@@ -164,6 +178,14 @@ namespace CarturUIHud
         // (Part 12), so the reflection and the "is that mod installed" branch are both gone.
         private static bool s_started;
         private static readonly TMP_Text[] s_foodKeys = new TMP_Text[3];
+
+        /// <summary>
+        /// The countdown on the lower bevel, or the 1.0.x diamond - countdown inset above the
+        /// bottom corner. (The stack count it also drew was taken off, Cartur 2026-10-05.) Bound in Plugin as
+        /// Layout/quickSlotDetail and read when the diamonds are built, so turning it off and
+        /// relaunching is the whole of putting it back.
+        /// </summary>
+        internal static bool SlotDetail = true;
 
         internal static BepInEx.Logging.ManualLogSource Log;
 
@@ -397,7 +419,14 @@ namespace CarturUIHud
                     var trt = (RectTransform)s_foodTimes[i].transform;
                     trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 0f);
                     trt.pivot = new Vector2(0.5f, 0f);
-                    trt.anchoredPosition = new Vector2(0f, FoodSize * 0.2f);
+                    // The mirror of the key: the key rides KeyRise up from a fifth of the
+                    // diamond below the top corner, so "Eat" and the countdown ride the same
+                    // distance up from a fifth above the bottom one - 2.4 units off each corner
+                    // on an 82 unit diamond. That puts both on the frame's bevel with the icon
+                    // clear between them, instead of the countdown sitting over the icon's
+                    // lower edge. Off, it stays where 1.0.x had it.
+                    trt.anchoredPosition = new Vector2(0f,
+                        SlotDetail ? FoodSize * 0.2f - KeyRise + TimerLift : FoodSize * 0.2f);
                 }
             }
 
@@ -415,9 +444,8 @@ namespace CarturUIHud
         /// </summary>
         private static TMP_Text KeyLabel(RectTransform box, int index)
         {
-            var go = new GameObject("CarturUIHud_Key", typeof(RectTransform));
-            var rt = (RectTransform)go.transform;
-            rt.SetParent(box, false);
+            TMP_Text text = Glyph(box, "CarturUIHud_Key", index);
+            var rt = (RectTransform)text.transform;
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = new Vector2(FoodSize, KeyHeight);
@@ -426,40 +454,89 @@ namespace CarturUIHud
             // 18.5 units down on an 82 unit diamond and the letter was lying across it. Lifting
             // it by its own height puts it on the frame's upper bevel instead.
             rt.anchoredPosition = new Vector2(0f, -FoodSize * 0.2f + KeyRise);
-
-            var text = go.AddComponent<TextMeshProUGUI>();
-            text.font = s_foodTimes[index] != null ? s_foodTimes[index].font : null;
-            text.fontSize = 14f;
-            text.alignment = TextAlignmentOptions.Center;
-            // White with a thin black outline. The letter sits over the item icon, and icons
-            // run from near-black berries to bright cooked meat, so no solid colour reads
-            // against all of them - the outline is what makes it legible, the colour only
-            // decides which half of the range it prefers.
-            //
-            // The outline goes on text.fontMaterial, which hands back a per-label instance.
-            // Writing it to text.font.material instead would outline every piece of text in
-            // the game drawn with this font.
-            text.color = Color.white;
-            // Bold: at 14pt over a busy icon the plain weight read faint, and thickening the
-            // glyph does more for it than brightening a colour that is already white.
-            text.fontStyle = FontStyles.Bold;
-            Material material = text.fontMaterial;
-            material.EnableKeyword(ShaderUtilities.Keyword_Outline);
-            material.SetColor(ShaderUtilities.ID_OutlineColor, Color.black);
-            material.SetFloat(ShaderUtilities.ID_OutlineWidth, KeyOutline);
-            text.raycastTarget = false;
-            text.text = string.Empty;
             return text;
         }
 
-        /// <summary>Refreshes the key letters. Called with the icons, not per frame.</summary>
+        /// <summary>
+        /// One small piece of text on a diamond: the game's own countdown font, white, bold, and
+        /// outlined in black. Built once per box and then only its text changes, so nothing is
+        /// allocated per frame.
+        ///
+        /// The font is taken off the countdown label, which is why that one is fetched first in
+        /// SkinFood: built the other way round, every letter came out with a null font on the
+        /// first Awake.
+        /// </summary>
+        private static TMP_Text Glyph(RectTransform box, string name, int index)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(box, false);
+
+            var text = go.AddComponent<TextMeshProUGUI>();
+            text.fontSize = KeyFontSize;
+            text.alignment = TextAlignmentOptions.Center;
+            // White with a thin black outline. The glyph sits over the item icon, and icons
+            // run from near-black berries to bright cooked meat, so no solid colour reads
+            // against all of them - the outline is what makes it legible, the colour only
+            // decides which half of the range it prefers.
+            text.color = Color.white;
+            // Bold: at this size over a busy icon the plain weight read faint, and thickening
+            // the glyph does more for it than brightening a colour that is already white.
+            text.fontStyle = FontStyles.Bold;
+            text.raycastTarget = false;
+            text.text = string.Empty;
+            MatchFont(text, s_foodTimes[index]);
+            Outline(text);
+            return text;
+        }
+
+        /// <summary>
+        /// Puts the label on the same font asset as the diamond's own countdown, and puts the
+        /// outline back afterwards.
+        ///
+        /// Both of those matter. Assigning TMP_Text.font rebuilds the label's material from the
+        /// asset's default, so an outline set before the font is lost - which is why the outline
+        /// is written here rather than where the label is built. And this is called again from
+        /// RefreshQuickSlotKeys, not only at Awake: the key and the count are ours and are built
+        /// once, while the countdown beside them is vanilla's own label, so a mod that swaps
+        /// fonts on the objects that exist when it loads changes one and not the other. Matching
+        /// on every refresh is what keeps all three the same face without this file knowing
+        /// which mod did it or when.
+        /// </summary>
+        private static void MatchFont(TMP_Text label, TMP_Text model)
+        {
+            if (label == null || model == null || model.font == null || label.font == model.font)
+                return;
+
+            label.font = model.font;
+            Outline(label);
+        }
+
+        /// <summary>
+        /// The thin black outline, on the label's own material instance. text.fontMaterial hands
+        /// back a per-label copy; writing to text.font.material instead would outline every piece
+        /// of text in the game drawn with this font.
+        /// </summary>
+        private static void Outline(TMP_Text label)
+        {
+            Material material = label.fontMaterial;
+            material.EnableKeyword(ShaderUtilities.Keyword_Outline);
+            material.SetColor(ShaderUtilities.ID_OutlineColor, Color.black);
+            material.SetFloat(ShaderUtilities.ID_OutlineWidth, KeyOutline);
+        }
+
+        /// <summary>
+        /// Refreshes the key letters, and keeps both of our labels on the countdown's font.
+        /// Called with the icons, not per frame.
+        /// </summary>
         private static void RefreshQuickSlotKeys()
         {
             for (int i = 0; i < s_foodKeys.Length; i++)
             {
+                TMP_Text model = s_foodTimes != null && i < s_foodTimes.Length ? s_foodTimes[i] : null;
                 TMP_Text label = s_foodKeys[i];
                 if (label == null)
                     continue;
+                MatchFont(label, model);
                 string key = QuickSlots.KeyText(i);
                 if (label.text != key)
                     label.text = key;
@@ -599,6 +676,7 @@ namespace CarturUIHud
             if (icon.color != Color.white)
                 icon.color = Color.white;
         }
+
 
         private static void Countdown(int index, ItemDrop.ItemData slot, Player.Food food)
         {

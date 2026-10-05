@@ -28,6 +28,12 @@ namespace CarturUIHud
     // button on its own InventoryGui.Show postfix, and InventoryScreen.Column re-seats those two
     // into the side column - so it has to be patched first. See the [HarmonyAfter] on Column.
     [BepInDependency("com.jekkle.valheim.carturwastemanagement", BepInDependency.DependencyFlags.SoftDependency)]
+    // Soft, and only for load order again: EnchantingScreen looks its window type up by name, so
+    // EpicLoot has to have been loaded before this runs or the lookup finds nothing.
+    [BepInDependency("randyknapp.mods.epicloot", BepInDependency.DependencyFlags.SoftDependency)]
+    // Soft, load order only: HDLoader reads HD Valheim Textures' TextureReplacer, which that mod
+    // builds in its own Awake.
+    [BepInDependency(HDLoader.HdGuid, BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
@@ -38,18 +44,28 @@ namespace CarturUIHud
         {
             try
             {
+                // First, so the HD texture load starts while the logo screens are still up. It
+                // catches its own failures and leaves HD Valheim Textures to load as before.
+                HDLoader.Log = Logger;
+                HDLoader.Init(this, new Harmony(PluginGuid));
+
                 HudSkin.Log = Logger;
                 HudLayout.Log = Logger;
                 Skin.Log = Logger;
                 InventoryScreen.Log = Logger;
                 Hotbar.Log = Logger;
                 HotbarRow.Log = Logger;
+                CraftingBoard.Log = Logger;
+                MenuBoards.Log = Logger;
                 LoadingArt.Log = Logger;
                 SleepVideo.Log = Logger;
                 Inlays.Log = Logger;
+                AutoBoard.Log = Logger;
+                ChestBoard.Log = Logger;
                 CookTimer.Log = Logger;
                 Tooltip.Log = Logger;
                 StyleTab.Log = Logger;
+                EnchantingScreen.Log = Logger;
 #if DIAGNOSTICS
                 Dump.Log = Logger;
                 IconRender.Log = Logger;
@@ -59,6 +75,7 @@ namespace CarturUIHud
                 ShieldSlot.Log = Logger;
                 SlotPatches.Log = Logger;
                 EquipmentPanel.Log = Logger;
+                CharacterPreview.Log = Logger;
                 QuickSlots.Log = Logger;
                 AutoEquip.Log = Logger;
                 QuiverCompat.Log = Logger;
@@ -83,6 +100,14 @@ namespace CarturUIHud
                     Logger.LogWarning("assets missing from " + AssetLoader.AssetsDir + " - HUD left vanilla");
                     return;
                 }
+
+                // The food diamonds' second layout, and the way back off it. Read once, when the
+                // diamonds are built at Hud.Awake, so a change takes effect on the next launch.
+                HudSkin.SlotDetail = Config.Bind(
+                    "Layout", "quickSlotDetail", true,
+                    "On the food diamonds: the Eat/countdown text sits on the bottom bevel beside "
+                    + "where the key sits on the top one. Off puts the countdown back above the "
+                    + "bottom corner.").Value;
 
                 ConfigEntry<bool> editMode = Config.Bind(
                     "Layout", "editMode", false,
@@ -138,6 +163,11 @@ namespace CarturUIHud
                 harmony.PatchAll(typeof(HotbarRow));
                 harmony.PatchAll(typeof(IconHoverPatch));
                 harmony.PatchAll(typeof(InventoryScreen));
+                harmony.PatchAll(typeof(CraftingBoard));
+                harmony.PatchAll(typeof(ChestBoard));
+                harmony.PatchAll(typeof(HoverFx));
+                harmony.PatchAll(typeof(StoreBoard));
+                harmony.PatchAll(typeof(MenuBoards));
                 harmony.PatchAll(typeof(LoadingScreen));
                 harmony.PatchAll(typeof(LoadingArt));
                 harmony.PatchAll(typeof(SleepVideo));
@@ -150,6 +180,10 @@ namespace CarturUIHud
                 harmony.PatchAll(typeof(Tooltip));
                 harmony.PatchAll(typeof(CookTimer));
                 harmony.PatchAll(typeof(StyleTab));
+                harmony.PatchAll(typeof(Welcome));
+                // EpicLoot's enchanting table, if it is installed. Hand-patched rather than
+                // PatchAll'ed, because the type it hooks is in a mod this one does not reference.
+                EnchantingScreen.Init(harmony);
 #if DIAGNOSTICS
                 harmony.PatchAll(typeof(IconRender));
 #endif
@@ -171,6 +205,7 @@ namespace CarturUIHud
                 harmony.PatchAll(typeof(SlotPatches));
                 harmony.PatchAll(typeof(AutoEquip));
                 harmony.PatchAll(typeof(EquipmentPanel));
+                harmony.PatchAll(typeof(CharacterPreview));
                 harmony.PatchAll(typeof(QuickSlots));
                 harmony.PatchAll(typeof(GamepadSlots));
                 harmony.PatchAll(typeof(ShieldSlot));

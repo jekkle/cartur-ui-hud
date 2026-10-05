@@ -1,0 +1,5 @@
+Edit this image. It is a dark carved Norse game menu panel with six recessed button bars in one centred column and an empty stretch of wood below them.
+
+Make the panel SHORTER so the six bars fill its interior: the bars keep their size and stay exactly six, evenly spaced from just under the top border to just above the bottom border, and the empty wood below the bars is removed by bringing the bottom border up. The panel should end up about as tall as it is wide plus one third.
+
+Keep everything else identical: the bronze knotwork border, four raven heads with teal eyes at the corners, the tree-of-life medallion on top, the dark wood, the bar style. Exactly six bars, all empty - no words. Pure white background outside the panel, no shadow.

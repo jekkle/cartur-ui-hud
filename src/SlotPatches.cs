@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -268,8 +268,18 @@ namespace CarturUIHud
         [HarmonyPostfix]
         private static void FindEmptySlot(Inventory __instance, bool topFirst, ref Vector2i __result)
         {
-            if (IsPlayerInventory(__instance))
-                __result = Slots.FirstFreeBagCell(__instance, topFirst);
+            if (!IsPlayerInventory(__instance))
+                return;
+
+            Vector2i vanilla = __result;
+            __result = Slots.FirstFreeBagCell(__instance, topFirst);
+#if DIAGNOSTICS
+            Log.LogInfo(string.Format(
+                "slotfind: vanilla=({0},{1}) -> ours=({2},{3})  topFirst={4}  baseRows={5} visible={6} full={7} invH={8} invW={9}",
+                vanilla.x, vanilla.y, __result.x, __result.y, topFirst,
+                Slots.BaseRows, Slots.VisibleRows, Slots.FullHeight,
+                __instance.GetHeight(), __instance.GetWidth()));
+#endif
         }
 
         /// <summary>
@@ -413,13 +423,26 @@ namespace CarturUIHud
                 }
             }
 
-            // Pulling worn armour out of its slot and into the grid takes it off. The position
-            // is copied to a local first: reading a field of a by-value struct parameter emits
-            // ldflda, which Harmony's own analyser reports as modifying a non-ref patch
-            // parameter (Harmony003). It is a read - pos is never written in this method - but
-            // a warning on every build is how a real one gets missed.
+            // Pulling a worn item out of its slot and into the grid takes it off - armour out of
+            // an equipment slot, and a raised shield out of the shield slot.
+            //
+            // The shield needs this for the same reason the armour does, read off
+            // InventoryGui.OnSelectedItem: it unequips the dragged item, drops it, and then
+            // re-equips it if it was equipped before and is still in the pack (the `flag`
+            // branch). So a shield the slot raised comes out of the slot still raised, and
+            // nothing lowers it again - ShieldSlot.UnequipItem only lowers the item the slot
+            // still holds, which is now something else or nothing. The other ways out already
+            // work: shift-click to a container goes through Modifier.Move, which calls
+            // UnequipItem and does not re-equip, and a drop into a chest fails the
+            // ContainsItem check in that branch.
+            //
+            // The position is copied to a local first: reading a field of a by-value struct
+            // parameter emits ldflda, which Harmony's own analyser reports as modifying a
+            // non-ref patch parameter (Harmony003). It is a read - pos is never written in this
+            // method - but a warning on every build is how a real one gets missed.
             Vector2i cell = pos;
-            if (source != null && source.Kind == Slots.Kind.Equipment && player.IsItemEquiped(drag)
+            if (source != null && (source.Kind == Slots.Kind.Equipment || source.Kind == Slots.Kind.Shield)
+                && player.IsItemEquiped(drag)
                 && intoPlayer && target == null && grid.GetInventory().GetItemAt(cell.x, cell.y) == null)
             {
                 Remember(ref s_unequip, pos, drag);
@@ -485,7 +508,7 @@ namespace CarturUIHud
                 // Only if it really did leave a slot - a drop the game refused leaves it where
                 // it was, and taking it off then would be wrong.
                 Slots.Slot now = Slots.Of(unequip);
-                if (now == null || now.Kind != Slots.Kind.Equipment)
+                if (now == null || (now.Kind != Slots.Kind.Equipment && now.Kind != Slots.Kind.Shield))
                     Slots.Unequip(player, unequip);
             }
         }

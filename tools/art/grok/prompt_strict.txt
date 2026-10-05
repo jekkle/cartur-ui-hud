@@ -1,0 +1,5 @@
+Two images side by side. The RIGHT image is only a STYLE reference: dark carved Norse game UI - aged bronze Celtic knotwork border, raven heads with glowing teal eyes at the four corners, dark weathered wood, recessed boxes with thin bronze rims, bronze plate buttons.
+
+Redraw the LEFT grey layout guide as a finished panel in that style. This is a precise UI layout: every grey shape becomes one element at EXACTLY the same position, size and proportion - measure them. Dark grey shapes are bronze-rimmed button plates or sockets; light grey shapes are recessed dark wells or fields. Do not add any element that is not in the guide, do not drop any, do not merge any, do not move any. Keep the empty margins where the guide has them.
+
+NO tree medallion on the top edge - the top edge is plain knotwork. Every element is EMPTY: no words, no letters, no icons anywhere. Same outer rectangle as the guide. Plain flat pure white background outside the panel, no shadow. Leave the right reference image out of the result.

@@ -1,0 +1,3 @@
+Two images side by side. The RIGHT image is the style reference: a dark carved Norse game UI panel - aged bronze Celtic knotwork border, raven heads with glowing teal eyes at the corners, a round tree-of-life medallion on the top edge, dark weathered wood.
+
+Redraw ONLY the left grey rectangle as a finished panel in exactly that style: the same bronze knotwork border, raven heads at all four corners, the tree-of-life medallion centred on the top edge, and a plain open interior of dark weathered wood planks. The interior must be completely EMPTY - no boxes, no bars, no plates, no buttons, no wells, no words, no carvings. Same outer shape as the grey rectangle. Plain flat pure white background outside the panel, no shadow. Leave the right reference image out of the result.
