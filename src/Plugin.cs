@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -40,7 +40,7 @@ namespace CarturUIHud
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
         public const string PluginName = "Carturs UI - HUD";
-        public const string PluginVersion = "1.0.4";
+        public const string PluginVersion = "1.1.0";
 
         private void Awake()
         {
@@ -166,24 +166,42 @@ namespace CarturUIHud
                 // 2026-10-05). The order is unchanged - postfixes on a shared method (InventoryGui.
                 // Show) run in patch order, and the layout depends on it.
                 var harmony = new Harmony(PluginGuid);
+
+                // One switch back to the published HUD (Cartur, 2026-10-05). Off leaves the bars,
+                // food diamonds, power box, edit mode, the HD texture loader and everything the
+                // equipment/quick/shield slots need - the inventory, hotbar and equipment panel host
+                // them, and switching the slots off would drop worn gear on the ground - and takes
+                // every other new panel back to vanilla. Read at start-up; a change needs a restart.
+                bool panels = Config.Bind("Panels", "newPanels", true,
+                    "Turn off to keep only the HUD (bars, food diamonds, guardian power) and the "
+                    + "equipment/quick/shield slots with the inventory, hotbar and equipment panel that "
+                    + "hold them; crafting, chests, trader, menus, build menu, loading/sleep screens, "
+                    + "popups, hover effect and the rest go back to vanilla. Restart to apply.").Value;
+
                 foreach (Type t in new[] { typeof(HudSkin), typeof(VanillaBars), typeof(EditInputBlock),
                                            typeof(Hotbar), typeof(HotbarRow), typeof(IconHoverPatch),
-                                           typeof(InventoryScreen), typeof(CraftingBoard), typeof(ChestBoard),
-                                           typeof(HoverFx), typeof(StoreBoard), typeof(MenuBoards),
-                                           typeof(LoadingScreen), typeof(LoadingArt), typeof(SleepVideo),
-                                           typeof(Inlays), typeof(SettingsScreen), typeof(PauseMenu),
-                                           typeof(BuildMenu), typeof(ListScreens), typeof(Screens),
-                                           typeof(Tooltip), typeof(CookTimer), typeof(StyleTab),
-                                           typeof(Welcome) })
+                                           typeof(InventoryScreen), typeof(CookTimer), typeof(StyleTab) })
                     Guard(t.Name, () => harmony.PatchAll(t));
-                // EpicLoot's enchanting table and Jotunn's failed-connection window, if those mods
-                // are installed: hand-patched, because the types are in mods this one does not reference.
-                Guard("EnchantingScreen", () => EnchantingScreen.Init(harmony));
-                Guard("JotunnWindows", () => JotunnWindows.Init(harmony));
+                if (panels)
+                {
+                    foreach (Type t in new[] { typeof(CraftingBoard), typeof(ChestBoard), typeof(HoverFx),
+                                               typeof(StoreBoard), typeof(MenuBoards), typeof(LoadingScreen),
+                                               typeof(LoadingArt), typeof(SleepVideo), typeof(Inlays),
+                                               typeof(SettingsScreen), typeof(PauseMenu), typeof(BuildMenu),
+                                               typeof(ListScreens), typeof(Screens), typeof(Tooltip),
+                                               typeof(Welcome) })
+                        Guard(t.Name, () => harmony.PatchAll(t));
+                    // EpicLoot's enchanting table and Jotunn's failed-connection window, if those mods
+                    // are installed: hand-patched, because the types are in mods this one does not reference.
+                    Guard("EnchantingScreen", () => EnchantingScreen.Init(harmony));
+                    Guard("JotunnWindows", () => JotunnWindows.Init(harmony));
+                    Guard("MapBorder", () => harmony.PatchAll(typeof(MapBorder)));
+                }
+                else
+                    Logger.LogInfo("newPanels off: HUD, slots, inventory, hotbar and equipment panel only");
 #if DIAGNOSTICS
                 Guard("IconRender", () => harmony.PatchAll(typeof(IconRender)));
 #endif
-                Guard("MapBorder", () => harmony.PatchAll(typeof(MapBorder)));
 
                 // The equipment, quick and shield slots.
                 Guard("slot system", () =>

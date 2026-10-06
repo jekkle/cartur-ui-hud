@@ -53,6 +53,8 @@ namespace CarturUIHud
         public Vector2 FrameOffset = Vector2.zero;
 
         private float m_window = -1f;
+        private TMP_Text m_textFor;   // the Text the cached number below was written to
+        private int m_shown;
 
         public bool Valid => Panel != null && Fast != null && Slow != null;
 
@@ -99,9 +101,17 @@ namespace CarturUIHud
             // At FullStat the window is the full natural middle of Bar.png. Height is
             // deliberately NOT a factor: it would tie length to thickness, and then bars of
             // different thicknesses could never be made the same length.
-            float window = Mathf.Max(
-                max / FullStat * HudSkin.MaxWindowUnits * LengthScale,
-                AssetLoader.MinWindowUnits);
+            float window = max / FullStat * HudSkin.MaxWindowUnits * LengthScale;
+
+            // Length is linear in max stat with no ceiling, so around 1000 health the point of
+            // the frame ran off the right edge of the screen. Cap the window so the frame's
+            // right ornament still ends inside the parent (hudroot, which spans the canvas).
+            // The bar's x is read every frame because edit mode can drag it. (From 1.0.5.)
+            float parentWidth = ((RectTransform)Panel.parent).rect.width;
+            if (parentWidth > 0f)
+                window = Mathf.Min(window,
+                    parentWidth - Panel.anchoredPosition.x - AssetLoader.FrameRightUnits * Height * FrameScale);
+            window = Mathf.Max(window, AssetLoader.MinWindowUnits);
 
             // The rect only changes when max health does, so this is untouched most frames.
             if (!Mathf.Approximately(window, m_window))
@@ -124,9 +134,15 @@ namespace CarturUIHud
 
             if (Text != null)
             {
-                string label = Mathf.CeilToInt(current).ToString();
-                if (Text.text != label)
-                    Text.text = label;
+                // Format only when the number changes; this runs every frame per bar. Build
+                // hands over a new Text on every Hud.Awake, so the cache is keyed to it. (From 1.0.5.)
+                int shown = Mathf.CeilToInt(current);
+                if (Text != m_textFor || shown != m_shown)
+                {
+                    m_textFor = Text;
+                    m_shown = shown;
+                    Text.text = shown.ToString();
+                }
             }
         }
 

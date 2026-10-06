@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.1.0
+
+The rest of the interface. Until now this mod was the HUD; now it reskins most of the game.
+
+- **Read first:** Equipment and Quick Slots and Shield Me Bruh are now incompatible — their
+  equipment, quick and shield slots are built in. Remove them before updating. Uninstalling
+  this mod drops what is in those slots on the ground, the same as removing Equipment and
+  Quick Slots.
+- **`Panels / newPanels`** (on by default). Off keeps the HUD from 1.0.5 plus the inventory,
+  hotbar and equipment panel that hold the slots, and puts every other screen back to
+  vanilla. Restart to apply.
+- Inventory, hotbar and an equipment panel with your character live in it, plus equipment,
+  quick (Z / V / B) and shield slots. The food diamonds show the quick slots.
+- Painted boards for crafting, chests, the trader, the build menu, skills, compendium,
+  popups, the pause and settings menus, and the loading and sleep screens.
+- Epic Loot's enchanting table (one board per tab) and trader windows, when it is installed.
+- With HD Valheim Textures installed, its textures load during the logo screen with a
+  progress bar, instead of freezing the main menu for half a minute or more.
+- A hover effect on every button, toggle and dropdown; a bronze highlight on the selected row.
+- New default layout. Bars keep the positions they had; anything you moved stays where you
+  put it.
+- Bars stay on screen at very high health, and their numbers are only rebuilt when they
+  change (from 1.0.5).
+
+## 1.0.5
+
+- Bar text is only rebuilt when the value changes, not every frame.
+- Extended Action Quick Slots: its bar is found even when it appears late, and the mod no longer adds another listener every time the HUD rebuilds.
+- The bars stay on screen at very high health and stamina.
+- If the mod fails to start, it now removes all of its changes so the game shows its normal bars.
+- The adrenaline bar hides at zero adrenaline, like vanilla, instead of showing an empty frame for anyone wearing a trinket.
+
 ## 1.0.4
 
 - Edit mode works on machines where it did not. The overlay appeared, the cursor came back,

@@ -1,22 +1,52 @@
 # Cartur's UI — HUD
 
-A hand-drawn bronze HUD. Norse knotwork frames on the bars, diamond frames on the
-food, and every piece placed and sized by you.
+**Just want the HUD from before?** Set **`Panels / newPanels`** to `false` in the config and
+restart. That keeps the bars, food diamonds, guardian power and edit mode, plus the
+inventory, hotbar and equipment panel (they hold the new equipment, quick and shield slots),
+and puts every other screen back to vanilla. The slots stay on either way: turning them off
+would drop whatever is in them on the ground.
+
+**Read before installing:**
+
+- **Remove Equipment and Quick Slots and Shield Me Bruh first.** Their slots are built in
+  now. If either is still installed, BepInEx skips *this* mod and starts the game without it.
+- **Uninstalling drops what is in the equipment, quick and shield slots** on the ground where
+  you log in (the same as removing Equipment and Quick Slots). Take your gear off first, or
+  pick it back up.
+- Made for GUI scale 100 %. Above about 130 % the crafting and equipment panels overlap.
+- Not every screen is reskinned yet — see the list below.
+
+![Inventory and crafting](https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/ui-inventory-crafting.png)
 
 ![The HUD in place](https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/hud-closeup.png)
 
-![In world](https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/hud-in-world.png)
+## What it does
 
-- **Health, stamina, eitr and adrenaline bars** in a sliced bronze frame that keeps
-  its ornaments crisp at any length.
-- **Three food diamonds** with the countdown on each.
-- **The guardian power** in its own frame, with Ready or cooldown over the icon.
-- **Eitr and adrenaline get a row each** — neither is drawn until you have that
-  pool, and neither hides the other.
+A hand-drawn wood-and-bronze interface: Norse knotwork boards behind the windows, bronze
+frames on the bars and food, and every piece placed and sized by you.
 
-Bars grow with your maximum, not just your current value: eat and the bar itself
-gets longer. Each reaches the same length at its own ceiling, so a 100-point
-adrenaline pool reads as full as a 325-point health pool.
+- **HUD** — health, stamina, eitr and adrenaline bars in bronze frames that grow with your
+  maximum; three food diamonds with countdowns; the guardian power with Ready or cooldown.
+- **Inventory** — bag, hotbar and an equipment panel with your character live in it, plus
+  equipment, quick (Z / V / B) and shield slots. The quick slots are the food diamonds.
+- **Crafting, chests, the trader** — on painted boards, controls seated on their plates.
+- **Build menu, skills, compendium, popups, pause and settings menus, loading and sleep
+  screens** — on the same boards.
+- **Epic Loot's enchanting table and trader windows**, when Epic Loot is installed — one
+  board per enchanting tab.
+- **Loading HD Valheim Textures without freezing.** With HD Valheim Textures installed, its
+  textures load during the logo screen with a progress bar, instead of the game hanging for
+  half a minute or more on the main menu.
+- A hover effect on every button, and a bronze highlight on the selected row.
+
+![Enchanting table](https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/ui-enchanting-table.png)
+
+![Build menu](https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/ui-build-menu.png)
+
+![Trader](https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/ui-trader.png)
+
+**Still on vanilla art:** the large map and minimap frames, the connecting screen, and some
+small dialogs. Controllers work, but the mod is made and tested with mouse and keyboard.
 
 ## Arranging it
 
@@ -32,57 +62,34 @@ or edit the file directly. It applies immediately, no restart.
 | ctrl + wheel | how far the frame's ornaments stand off the fill |
 | ctrl + drag | nudge the frame against the fill |
 
-Your input is held while edit mode is on, so a drag doesn't swing your axe. Turn it
-off when you're done; the layout saves either way.
-
-The three food diamonds and the power box move together as one group. The four bars
-are individual, so you can stack them how you like.
+Your input is held while edit mode is on, so a drag doesn't swing your axe. Turn it off when
+you're done; the layout saves either way. **`resetLayout`** puts every piece back.
 
 ## Settings
 
-`BepInEx/config/com.jekkle.valheim.carturuihud.cfg`. Changes apply live.
+`BepInEx/config/com.jekkle.valheim.carturuihud.cfg`.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `Layout / editMode` | false | Arrange the HUD — see above. |
-| `Art / woodPanel` | true | Use the drawn wood panel for menu panels. |
-| `Art / darkMode` | false | Keep vanilla's dimmed panel material. On makes panels darker. |
-
-Under `Layout` there is also one line per piece, written as
-`x,y,size,length,frameSize,frameX,frameY`. Hand-editable if you want exact numbers.
+| `Panels / newPanels` | true | Off: HUD, slots, inventory, hotbar and equipment panel only. Restart. |
+| `Layout / editMode` | false | Arrange the pieces — see above. |
+| `Layout / resetLayout` | false | Tick to put every piece back. |
+| `Art / darkMode` | false | Keep vanilla's dimmed panel material. |
 
 ## Compatibility
 
-Four mods are declared incompatible in the plugin itself, so BepInEx will not start
-the game with this one and any of them in the same profile. Take the other one out:
+Declared incompatible, so BepInEx skips this mod if one of these is in the profile:
+**Auga**, **AugaLite**, **Equipment and Quick Slots**, **Shield Me Bruh**.
 
-- **Auga** and **AugaLite** — they replace the same bars, panels and loading screen.
-- **[Equipment and Quick Slots](https://thunderstore.io/c/valheim/p/RandyKnapp/EquipmentAndQuickSlots/)**
-  and **Shield Me Bruh** — their equipment, quick and shield slots are part of this
-  mod now. A character that has been through Equipment and Quick Slots keeps every
-  worn item exactly where it was: the slot grid layout here is the one it used.
-
-**BetterArchery** works alongside — its quiver is hosted in three ammo cells of the
-equipment panel. **Cartur's Waste Management** works alongside too; its trash can and
-sort button are seated into the inventory's side column.
-
-This is more than a HUD, so any other mod that redraws one of these will fight it:
-the four bars, the food and guardian-power boxes, the hotbar, the inventory,
-container, crafting and info panels, the equipment, quick and shield slots, item
-tooltips, the build menu, the skills and compendium screens, the settings and pause
-menus, the trader, chat and radial menus, and the loading and sleep screens. It also
-draws a frame around the minimap and the map; the map itself is left alone.
-
-Known good alongside: Epic Loot, Jotunn.
+Works alongside **Epic Loot**, **Jotunn**, **BetterArchery** (its quiver sits in three ammo
+cells of the equipment panel), **HD Valheim Textures** and **Cartur's Waste Management**
+(its trash can and sort button sit in the inventory's side column). Any other mod that
+redraws the same windows will fight it.
 
 ## Install
 
 Use a mod manager (r2modman / Thunderstore / Gale) and it pulls in BepInEx for you.
-
-Client-side. No server install needed, works in multiplayer.
-
-This is the HUD. More of the interface is coming as separate mods, so you can take
-the parts you want.
+Client-side; no server install needed, works in multiplayer.
 
 ---
 
@@ -99,4 +106,6 @@ Bug reports get their own thread so nothing is lost in a chat scroll, and reques
 [Follow Command](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Follow_Command/) ·
 [Flooring](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Flooring/) ·
 [Waste Management](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Waste_Management/) ·
-[Feeding Trough](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Feeding_Trough/)
+[Feeding Trough](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Feeding_Trough/) ·
+[Build Camera](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Build_Camera/) ·
+[Combat Text](https://thunderstore.io/c/valheim/p/Cartur/Carturs_Combat_Text/)
