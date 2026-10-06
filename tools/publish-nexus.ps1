@@ -128,22 +128,56 @@ if ($WhatIf) { Write-Host "WhatIf - nothing uploaded."; return }
 # --- 1. open an upload session ---------------------------------------------------
 # md5 is optional until 2026-12-01 and required after it. Sent now so this does not
 # quietly break on that date, and because it binds the presigned URL to these bytes.
-$session = Invoke-RestMethod -Method Post -Uri "$api/uploads" -Headers $headers -Body (@{
+$request = @{
     size_bytes = $file.Length
     filename   = $file.Name
     md5        = $md5
-} | ConvertTo-Json)
+} | ConvertTo-Json
 
-$uploadId = $session.data.id
-Write-Host "upload   : $uploadId"
+if ($file.Length -le 100MB) {
+    $session = Invoke-RestMethod -Method Post -Uri "$api/uploads" -Headers $headers -Body $request
+    $uploadId = $session.data.id
+    Write-Host "upload   : $uploadId"
 
-# --- 2. put the bytes ------------------------------------------------------------
-# Content-Disposition and Content-MD5 are part of the presigned URL's signature, so
-# storage rejects the upload outright if either is missing or does not match.
-Invoke-RestMethod -Method Put -Uri $session.data.presigned_url -InFile $zip -Headers @{
-    "Content-Disposition" = "attachment; filename=`"$($file.Name)`""
-    "Content-MD5"         = $md5Base64
-} -ContentType "application/octet-stream" | Out-Null
+    # --- 2. put the bytes --------------------------------------------------------
+    # Content-Disposition and Content-MD5 are part of the presigned URL's signature, so
+    # storage rejects the upload outright if either is missing or does not match.
+    Invoke-RestMethod -Method Put -Uri $session.data.presigned_url -InFile $zip -Headers @{
+        "Content-Disposition" = "attachment; filename=`"$($file.Name)`""
+        "Content-MD5"         = $md5Base64
+    } -ContentType "application/octet-stream" | Out-Null
+}
+else {
+    # Over 100 MiB the single-part route answers 400 (UI 1.1.0, 181 MB, 2026-10-05).
+    # /uploads/multipart is the S3 multipart flow (openapi.yaml, createMultipartUpload):
+    # PUT each part_size_bytes slice to its presigned URL, keep each part's ETag, POST the
+    # CompleteMultipartUpload XML to complete_presigned_url, then finalise as usual.
+    $session = Invoke-RestMethod -Method Post -Uri "$api/uploads/multipart" -Headers $headers -Body $request
+    $uploadId = $session.data.id
+    $partSize = [int64]$session.data.part_size_bytes
+    $urls = @($session.data.part_presigned_urls)
+    Write-Host "upload   : $uploadId  ($($urls.Count) parts of $([math]::Round($partSize / 1MB)) MB)"
+    $stream = [System.IO.File]::OpenRead($zip)
+    $xml = New-Object System.Text.StringBuilder
+    [void]$xml.Append("<CompleteMultipartUpload>")
+    try {
+        for ($i = 0; $i -lt $urls.Count; $i++) {
+            $length = [int][math]::Min($partSize, $file.Length - $i * $partSize)
+            $buffer = New-Object byte[] $length
+            $read = 0
+            while ($read -lt $length) { $read += $stream.Read($buffer, $read, $length - $read) }
+            $response = Invoke-WebRequest -Method Put -Uri $urls[$i] -Body $buffer -UseBasicParsing -ContentType "application/octet-stream"
+            $etag = $response.Headers["ETag"]
+            if (-not $etag) { throw "part $($i + 1) came back with no ETag" }
+            [void]$xml.Append("<Part><PartNumber>$($i + 1)</PartNumber><ETag>$etag</ETag></Part>")
+            Write-Host "part     : $($i + 1)/$($urls.Count)"
+        }
+    }
+    finally { $stream.Dispose() }
+    [void]$xml.Append("</CompleteMultipartUpload>")
+    Invoke-WebRequest -Method Post -Uri $session.data.complete_presigned_url -Body $xml.ToString() `
+        -ContentType "application/xml" -UseBasicParsing | Out-Null
+}
 Write-Host "uploaded : $([math]::Round($file.Length / 1KB)) KB"
 
 # --- 3. close the session and wait for it to be processed ------------------------
