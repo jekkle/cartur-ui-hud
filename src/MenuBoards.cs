@@ -258,6 +258,7 @@ namespace CarturUIHud
             }
             Place(world.Find("Text") as RectTransform, rt, tex, Rect.MinMaxRect(332, 543, 536, 563));
             Place(world.Find("PasswordField") as RectTransform, rt, tex, Rect.MinMaxRect(334, 567, 534, 592));
+            Locked(world.Find("PasswordField"));
             Place(world.Find("PasswordError") as RectTransform, rt, tex, Rect.MinMaxRect(332, 596, 536, 618));
             Seat(world.Find("Start") as RectTransform, rt, tex, Rect.MinMaxRect(331, 624, 565, 699));
             Log.LogInfo("world select board placed over the panel's frame");
@@ -608,6 +609,27 @@ namespace CarturUIHud
         }
 
         /// <summary>Stops a vanilla plate drawing. Clickables keep their graphic, cleared, to stay clickable.</summary>
+        /// <summary>
+        /// A field whose own plate went clear (Off) also lost its disabled look: Selectable tints its
+        /// target graphic, and that was the plate. The world-select password box is only
+        /// interactable while Start Server is ticked (FejdStartup.Update), so it looked ready to type
+        /// into and ignored the keys (Grog, Discord 2026-10-05: "it won't let me set my password";
+        /// the pilot found the clicks reach it and it takes input once Start Server is on). The tint
+        /// moves to the placeholder text, so a locked box reads dim, as vanilla's did.
+        /// </summary>
+        private static void Locked(Transform field)
+        {
+            var sel = field != null ? field.GetComponent<Selectable>() : null;
+            var hint = field != null ? field.Find("Placeholder")?.GetComponent<Graphic>() : null;
+            if (sel == null || hint == null)
+                return;
+            sel.targetGraphic = hint;
+            sel.transition = Selectable.Transition.ColorTint;
+            ColorBlock cb = sel.colors;
+            cb.disabledColor = new Color(1f, 1f, 1f, 0.25f);
+            sel.colors = cb;
+        }
+
         private static void Off(Transform t)
         {
             var g = t != null ? t.GetComponent<Graphic>() : null;
