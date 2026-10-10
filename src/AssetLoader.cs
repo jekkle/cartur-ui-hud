@@ -277,6 +277,7 @@ namespace CarturUIHud
         public static bool LoadTextures(BepInEx.Logging.ManualLogSource log)
         {
             AssetsDir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "", "assets");
+            Directory.CreateDirectory(CustomDir);   // so there is a folder to find
 
             s_barFrame = Load("bar_frame.png", log);
             s_barFill = Load("bar_fill.png", log);
@@ -371,8 +372,50 @@ namespace CarturUIHud
         internal static Texture2D LoadFile(string path, BepInEx.Logging.ManualLogSource log) =>
             Read(path, log);
 
-        private static Texture2D Load(string fileName, BepInEx.Logging.ManualLogSource log) =>
-            Read(Path.Combine(AssetsDir, fileName), log);
+        /// <summary>
+        /// Player art: a PNG in BepInEx/config/CarturUI/ named like a shipped file replaces it
+        /// (requested on Nexus by Gnralz88, who reskinned the bars and food frame). It has to be
+        /// the shipped file's size, because the bar frame's 9-slice and the boards' cell and face
+        /// rects are pixel positions in that art - a different size puts the cuts in the wrong
+        /// place. These three are drawn whole (food frame preserveAspect, fills by their height),
+        /// so any size works.
+        /// </summary>
+        private static readonly HashSet<string> s_anySize = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "food_frame.png", "bar_fill.png", "bar_fill_enemy.png" };
+
+        internal static string CustomDir => Path.Combine(BepInEx.Paths.ConfigPath, "CarturUI");
+
+        private static Texture2D Load(string fileName, BepInEx.Logging.ManualLogSource log)
+        {
+            string shipped = Path.Combine(AssetsDir, fileName);
+            string custom = Path.Combine(CustomDir, fileName);
+            if (File.Exists(custom))
+            {
+                Texture2D mine = Read(custom, log);
+                Vector2Int want = PngSize(shipped);
+                if (mine != null && (s_anySize.Contains(fileName) || (mine.width == want.x && mine.height == want.y)))
+                {
+                    log.LogInfo("custom art: " + fileName);
+                    return mine;
+                }
+                log.LogWarning(mine == null
+                    ? $"custom art {fileName} ignored: not a PNG or JPG the game can read."
+                    : $"custom art {fileName} ignored: it is {mine.width}x{mine.height}, the shipped one is {want.x}x{want.y}, and this piece has to match.");
+            }
+            return Read(shipped, log);
+        }
+
+        /// <summary>Width and height from a PNG's IHDR, big-endian at bytes 16 and 20, without decoding it.</summary>
+        private static Vector2Int PngSize(string path)
+        {
+            if (!File.Exists(path))
+                return Vector2Int.zero;
+            byte[] h = new byte[24];
+            using (FileStream f = File.OpenRead(path))
+                if (f.Read(h, 0, 24) < 24)
+                    return Vector2Int.zero;
+            return new Vector2Int(h[16] << 24 | h[17] << 16 | h[18] << 8 | h[19], h[20] << 24 | h[21] << 16 | h[22] << 8 | h[23]);
+        }
 
         private static Texture2D Read(string path, BepInEx.Logging.ManualLogSource log)
         {

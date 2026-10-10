@@ -57,6 +57,17 @@ individual, so you can stack them how you like.
 
 ![In world](docs/images/hud-in-world.png)
 
+## Your own art
+
+Put a PNG in `BepInEx/config/CarturUI/` with the same name as one of the mod's own files in
+`plugins/CarturUIHud/assets/`, and it is used instead. Restart the game to see it. The
+BepInEx log says `custom art: <name>` for each file it picked up.
+
+Make it the same size as the file it replaces: the bar frames and boards are cut at fixed
+pixel positions. `food_frame.png`, `bar_fill.png` and `bar_fill_enemy.png` can be any size.
+A file that doesn't fit is skipped with a warning in the log, and the original is used.
+Delete your file to go back.
+
 ## Compatibility
 
 Four mods are declared incompatible in the plugin itself, so BepInEx will not start the

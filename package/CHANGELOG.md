@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- **Your own art.** A PNG in `BepInEx/config/CarturUI/` named like one of the mod's files
+  replaces it - bar frames, fills, food frames, boards. Same size as the original, except
+  the food frame and bar fills, which can be any size. Requested on Nexus.
+
 ## 1.1.0
 
 The rest of the interface. Until now this mod was the HUD; now it reskins most of the game.

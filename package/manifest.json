@@ -1,6 +1,6 @@
 {
   "name": "Carturs_UI_HUD",
-  "version_number": "1.1.0",
+  "version_number": "1.1.1",
   "website_url": "https://github.com/jekkle/cartur-ui-hud",
   "description": "A hand-drawn wood-and-bronze Valheim UI: bronze HUD bars and food diamonds, inventory with equipment and quick slots, crafting, chests, trader, build menu and more. Every piece movable. Remove EAQS and Shield Me Bruh first.",
   "dependencies": [
