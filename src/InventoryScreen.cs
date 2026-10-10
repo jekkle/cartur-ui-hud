@@ -186,7 +186,10 @@ namespace CarturUIHud
         // Top to bottom. The two Cartur names are built by the waste management mod; the column
         // is laid out again until all four have turned up rather than once and hoping, which
         // covers that mod being absent altogether as well as its pieces arriving late.
-        private static readonly string[] ColumnNames = { "Armor", "CarturTrashCan", "CarturSortButton", "Weight" };
+        // Quick Stack Store's trash can ("Trash", see QssCompat) gets a box too when that mod is here.
+        private static readonly string[] ColumnNames = QssCompat.Present
+            ? new[] { "Armor", "CarturTrashCan", "Trash", "CarturSortButton", "Weight" }
+            : new[] { "Armor", "CarturTrashCan", "CarturSortButton", "Weight" };
         private static int s_seated;
         private static bool s_registered;
 
@@ -232,6 +235,8 @@ namespace CarturUIHud
             var found = new List<RectTransform>();
             AddIfFound(found, Box(gui.m_armor));
             AddIfFound(found, Descendant(panel, "CarturTrashCan"));
+            if (QssCompat.Present)
+                AddIfFound(found, Descendant(panel, "Trash"));
             AddIfFound(found, Descendant(panel, "CarturSortButton"));
             AddIfFound(found, Box(gui.m_weight));
 

@@ -94,7 +94,8 @@ Declared incompatible, so BepInEx skips this mod if one of these is in the profi
 
 Works alongside **Epic Loot**, **Jotunn**, **BetterArchery** (its quiver sits in three ammo
 cells of the equipment panel), **HD Valheim Textures** and **Cartur's Waste Management**
-(its trash can and sort button sit in the inventory's side column). Any other mod that
+(its trash can and sort button sit in the inventory's side column), and **Quick Stack Store**
+(its trash can joins the side column, and it leaves the equipment and quick slots alone). Any other mod that
 redraws the same windows will fight it.
 
 ## Install

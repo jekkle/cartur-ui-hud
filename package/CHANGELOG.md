@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.3
+
+- **Works with Quick Stack Store.** Its trash can no longer throws an error every time the
+  inventory opens - it gets a box in the side column instead. And quick stacking, store all and
+  sort now leave your equipment and quick slots alone, where before P emptied the quick slots
+  into chests. Food in a quick slot and arrows in the quiver can still be restocked. Reported on
+  Nexus.
+
 ## 1.1.2
 
 - **The server password box says when it's locked.** On the world screen it only takes typing

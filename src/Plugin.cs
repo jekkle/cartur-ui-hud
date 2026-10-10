@@ -36,11 +36,13 @@ namespace CarturUIHud
     [BepInDependency(HDLoader.HdGuid, BepInDependency.DependencyFlags.SoftDependency)]
     // Soft, load order only: JotunnWindows looks Jotunn's ModCompatibility up by name.
     [BepInDependency("com.jotunn.jotunn", BepInDependency.DependencyFlags.SoftDependency)]
+    // Soft, load order only: QssCompat patches Quick Stack Store's slot checks and trash can by name.
+    [BepInDependency(QssCompat.Guid, BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
         public const string PluginName = "Carturs UI - HUD";
-        public const string PluginVersion = "1.1.2";
+        public const string PluginVersion = "1.1.3";
 
         private void Awake()
         {
@@ -82,6 +84,7 @@ namespace CarturUIHud
                 QuickSlots.Log = Logger;
                 AutoEquip.Log = Logger;
                 QuiverCompat.Log = Logger;
+                QssCompat.Log = Logger;
 
                 // One experiment, one switch, nothing destroyed: the generated wood panel is a
                 // separate PNG beside the built one, and turning this off goes straight back.
@@ -212,6 +215,7 @@ namespace CarturUIHud
                     // stands down, and points its quiver row at our slots.
                     QuiverCompat.Init();
                 });
+                Guard("QssCompat", () => QssCompat.Init(harmony));
                 // BaseRowsPatch is nested inside QuiverCompat, and PatchAll(Type) reads
                 // AccessTools.GetDeclaredMethods on the type it is given - checked in the shipped
                 // 0Harmony, PatchTools.GetPatchMethods - so it never descends into a nested class.
