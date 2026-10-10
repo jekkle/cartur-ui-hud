@@ -83,6 +83,7 @@ Delete your file to go back.
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `Panels / newPanels` | true | Off: HUD, slots, inventory, hotbar and equipment panel only. Restart. |
+| `Panels / textScale` | 1 | Text size in the inventory, crafting, chest and trader windows, 0.8 to 1.6. Applies straight away. |
 | `Layout / editMode` | false | Arrange the pieces — see above. |
 | `Layout / resetLayout` | false | Tick to put every piece back. |
 | `Art / darkMode` | false | Keep vanilla's dimmed panel material. |

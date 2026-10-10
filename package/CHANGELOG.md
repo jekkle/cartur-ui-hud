@@ -7,6 +7,8 @@
   sort now leave your equipment and quick slots alone, where before P emptied the quick slots
   into chests. Food in a quick slot and arrows in the quiver can still be restocked. Reported on
   Nexus.
+- **`Panels / textScale`** - make the text in the inventory, crafting, chest and trader windows
+  bigger (up to 1.6) or smaller, for big monitors. Applies straight away. Requested on Nexus.
 
 ## 1.1.2
 

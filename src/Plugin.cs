@@ -121,6 +121,7 @@ namespace CarturUIHud
                     + "shift+wheel for a bar's length, ctrl+wheel and ctrl+drag for its frame. "
                     + "Turn off when done - the layout is saved either way.");
                 HudLayout.Init(Config, editMode);
+                TextScale.Init(Config);
 
                 // The loading screen pictures in assets/loading.
                 LoadingArt.Init(Config);
@@ -183,7 +184,8 @@ namespace CarturUIHud
 
                 foreach (Type t in new[] { typeof(HudSkin), typeof(VanillaBars), typeof(EditInputBlock),
                                            typeof(Hotbar), typeof(HotbarRow), typeof(IconHoverPatch),
-                                           typeof(InventoryScreen), typeof(CookTimer), typeof(StyleTab) })
+                                           typeof(InventoryScreen), typeof(CookTimer), typeof(StyleTab),
+                                           typeof(TextScale) })
                     Guard(t.Name, () => harmony.PatchAll(t));
                 if (panels)
                 {
