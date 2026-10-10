@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.2
+
+- **The server password box says when it's locked.** On the world screen it only takes typing
+  once Start Server is ticked (that's the game), but it looked ready, so typing did nothing.
+  Now it reads "Tick Start Server to set a password" and is shaded until you do. The game's
+  own "[Empty]" hint, which the 1.1.0 layout clipped out of sight, shows again. Reported on Discord.
+
 ## 1.1.1
 
 - **Your own art.** A PNG in `BepInEx/config/CarturUI/` named like one of the mod's files

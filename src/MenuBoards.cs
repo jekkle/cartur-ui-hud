@@ -608,28 +608,81 @@ namespace CarturUIHud
             return img;
         }
 
-        /// <summary>Stops a vanilla plate drawing. Clickables keep their graphic, cleared, to stay clickable.</summary>
         /// <summary>
         /// A field whose own plate went clear (Off) also lost its disabled look: Selectable tints its
         /// target graphic, and that was the plate. The world-select password box is only
-        /// interactable while Start Server is ticked (FejdStartup.Update), so it looked ready to type
-        /// into and ignored the keys (Grog, Discord 2026-10-05: "it won't let me set my password";
-        /// the pilot found the clicks reach it and it takes input once Start Server is on). The tint
-        /// moves to the placeholder text, so a locked box reads dim, as vanilla's did.
+        /// interactable while Start Server is ticked (FejdStartup.Update sets it every frame from
+        /// m_openServerToggle), so it looked ready to type into and ignored the keys (Grog, Discord
+        /// 2026-10-05: "it won't let me set my password").
+        ///
+        /// The box you see is painted into board_world.png, so nothing on the field can recolour
+        /// it - the 1.1.1 attempt tinted the placeholder, which is empty, and measured identical
+        /// locked and open (pilot shots, 2026-10-10). Instead the plate comes back as a black
+        /// shade over the painted box: tint alpha 0 while usable, 0.55 while locked.
         /// </summary>
         private static void Locked(Transform field)
         {
             var sel = field != null ? field.GetComponent<Selectable>() : null;
-            var hint = field != null ? field.Find("Placeholder")?.GetComponent<Graphic>() : null;
-            if (sel == null || hint == null)
+            var plate = field != null ? field.GetComponent<Graphic>() : null;
+            if (sel == null || plate == null)
                 return;
-            sel.targetGraphic = hint;
+            plate.color = Color.black;
+            sel.targetGraphic = plate;
             sel.transition = Selectable.Transition.ColorTint;
             ColorBlock cb = sel.colors;
-            cb.disabledColor = new Color(1f, 1f, 1f, 0.25f);
+            cb.normalColor = cb.highlightedColor = cb.pressedColor = cb.selectedColor = new Color(1f, 1f, 1f, 0f);
+            cb.disabledColor = new Color(1f, 1f, 1f, 0.55f);
+            cb.colorMultiplier = 1f;
             sel.colors = cb;
+            // The box is near black inside, so the shade alone is measurable (14 -> 7) but hard to
+            // see. Saying what unlocks it is what Grog was missing.
+            if (field.GetComponent<LockedHint>() == null)
+                field.gameObject.AddComponent<LockedHint>();
         }
 
+        /// <summary>Placeholder reads "Tick Start Server..." while the field is locked, its own text otherwise.</summary>
+        private sealed class LockedHint : MonoBehaviour
+        {
+            private TMP_InputField _field;
+            private TMP_Text _hint;
+            private string _own;
+
+            private void Awake()
+            {
+                _field = GetComponent<TMP_InputField>();
+                // By path, not _field.placeholder: the pilot's dump puts it at Text Area/Placeholder.
+                _hint = transform.Find("Text Area/Placeholder")?.GetComponent<TMP_Text>()
+                        ?? (_field != null ? _field.placeholder as TMP_Text : null);
+                _own = _hint != null ? _hint.text : null;
+                if (_hint == null)
+                    return;
+                // The box is one line tall: at its own 18pt the placeholder spilled past the
+                // Text Area mask and drew nothing (pilot audit "overflow"). Shrink to fit.
+                _hint.enableAutoSizing = true;
+                _hint.fontSizeMin = 8f;
+                _hint.fontSizeMax = _hint.fontSize;
+            }
+
+            // Every frame, not on change: the game writes its own placeholder ("[Empty]") back
+            // after this first sets it (pilot shot, 2026-10-10). A string compare is the whole cost.
+            private void Update()
+            {
+                if (_hint == null || _field == null)
+                    return;
+                const string Hint = "Tick Start Server to set a password";
+                if (!_field.interactable)
+                {
+                    if (_hint.text == Hint)
+                        return;
+                    _own = _hint.text;      // whatever the game wrote last, localized, put back on unlock
+                    _hint.text = Hint;
+                }
+                else if (_hint.text == Hint)
+                    _hint.text = _own;
+            }
+        }
+
+        /// <summary>Stops a vanilla plate drawing. Clickables keep their graphic, cleared, to stay clickable.</summary>
         private static void Off(Transform t)
         {
             var g = t != null ? t.GetComponent<Graphic>() : null;
