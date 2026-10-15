@@ -24,12 +24,24 @@ namespace CarturUIHud
 
         internal static BepInEx.Logging.ManualLogSource Log;
 
+        // Panels/newPanels, set by Plugin before patching. This class is patched either way because
+        // the bag hosts the equipment/quick/shield slots, but the crafting, chest and info panels live
+        // inside the same InventoryGui, so skinning its whole tree put the new art on them even with
+        // newPanels off (Maarcvs, Discord #general, 2026-10-11).
+        internal static bool Panels = true;
+
         [HarmonyPatch(typeof(InventoryGui), "Awake")]
         [HarmonyPostfix]
         private static void Awake(InventoryGui __instance)
         {
             Canvas canvas = __instance.GetComponentInParent<Canvas>();
             float ppu = canvas != null ? canvas.referencePixelsPerUnit : 100f;
+
+            if (!Panels)
+            {
+                SkinBagOnly(__instance, ppu);
+                return;
+            }
 
             Skin.Apply(__instance.transform, "inventory", ppu);
             Skin.Apply(__instance.m_playerGrid?.m_elementPrefab?.transform, "inventory element prefab", ppu);
@@ -62,6 +74,28 @@ namespace CarturUIHud
                 Dress(__instance.m_info, "banner");
             CraftingBoard.FitInfo(__instance);
             Log.LogInfo("inventory skinned, 4 panels registered for edit mode");
+        }
+
+        /// <summary>
+        /// newPanels off: the bag and its slot grid only. The container sits inside m_player in the
+        /// prefab, so the player panel is skinned child by child with the container left out; the
+        /// crafting and info panels, recipe rows, trophies and chest cells stay vanilla.
+        /// </summary>
+        private static void SkinBagOnly(InventoryGui gui, float ppu)
+        {
+            RectTransform player = gui.m_player;
+            if (player != null)
+                foreach (Transform child in player)
+                    if (child != gui.m_container)
+                        Skin.Apply(child, "inventory", ppu);
+            Skin.Apply(gui.m_playerGrid?.m_elementPrefab?.transform, "inventory element prefab", ppu);
+            Skin.Apply(gui.m_dragItemPrefab?.transform, "drag item prefab", ppu);
+
+            HudLayout.Reset(Owner, null);
+            s_registered = false;
+            Register("player", "Inventory", player);
+            Room(gui);
+            Log.LogInfo("inventory skinned (newPanels off: bag only), 1 panel registered for edit mode");
         }
 
         /// <summary>

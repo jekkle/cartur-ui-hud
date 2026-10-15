@@ -560,12 +560,35 @@ namespace CarturUIHud
             Vector2 offset = new Vector2(boardMid.x - insideMid.x, insideMid.y - boardMid.y) * s;
             rt.position = new Vector3(have.center.x + offset.x, have.center.y + offset.y, rt.position.z);
 
+            ClearTooltips(panel.Find("Tooltips") as RectTransform, rt);
             Place(panel.Find("topic") as RectTransform, rt, tex, ModTitle);
             // Centred both ways on the plate; top-aligned it sat high (Cartur, 2026-10-04).
             if (panel.Find("topic")?.GetComponent<TMP_Text>() is TMP_Text title)
                 title.alignment = TextAlignmentOptions.Center;
             Log.LogInfo("world modifiers frame sized to its contents, " + (tex.width * s).ToString("0") + " wide");
             return true;
+        }
+
+        /// <summary>
+        /// Vanilla's modifier descriptions are a fixed panel beside the window (panel/Tooltips);
+        /// ServerOptionsGUI.Update only switches it on and off, it never moves it (ILSpy). The board
+        /// is sized to fit the controls and came out wider than vanilla's frame, so its right edge
+        /// ran over the panel: board right 1732, descriptions from 1643 at 2560x1600 (pilot,
+        /// 2026-10-15; Nexus bug, crysis2142, 2026-10-11). The panel moves clear - right of the
+        /// board when it fits on screen, left of it when it does not.
+        /// </summary>
+        private static void ClearTooltips(RectTransform tips, RectTransform board)
+        {
+            if (tips == null || board == null) return;
+            Rect b = WorldRect(board), t = WorldRect(tips);
+            float gap = b.width * 0.02f;
+            if (t.xMin >= b.xMax + gap || t.xMax <= b.xMin - gap) return;
+            var screen = tips.GetComponentInParent<Canvas>()?.rootCanvas.transform as RectTransform;
+            float right = b.xMax + gap - t.xMin;
+            if (screen == null || t.xMax + right <= WorldRect(screen).xMax)
+                tips.position += new Vector3(right, 0f, 0f);
+            else
+                tips.position += new Vector3(b.xMin - gap - t.xMax, 0f, 0f);
         }
 
         private static void Cover(GameObject root, string path, string board, params string[] plates)

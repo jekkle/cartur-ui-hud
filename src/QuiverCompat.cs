@@ -174,8 +174,15 @@ namespace CarturUIHud
         [HarmonyPatch]
         internal static class BaseRowsPatch
         {
-            private static MethodBase TargetMethod() =>
-                AccessTools.Method(AccessTools.TypeByName("BetterArchery.BetterArchery"), "GetBaseInventoryRows");
+            // Looked up through the plugin's own assembly: AccessTools.TypeByName logged a HarmonyX
+            // warning on every load without Better Archery, which is most players.
+            private static MethodBase TargetMethod()
+            {
+                if (!Chainloader.PluginInfos.TryGetValue(Guid, out var info) || info?.Instance == null)
+                    return null;
+                Type type = info.Instance.GetType().Assembly.GetType("BetterArchery.BetterArchery");
+                return type != null ? AccessTools.Method(type, "GetBaseInventoryRows") : null;
+            }
 
             private static bool Prepare() => TargetMethod() != null;
 

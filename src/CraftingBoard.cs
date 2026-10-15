@@ -192,6 +192,7 @@ namespace CarturUIHud
             Hide(craft.Find("RecipeList/Recipes"));
             Hide(craft.Find("RecipeList/RecipeScroll"));
             Hide(craft.Find("RecipeList/RecipeScroll/Sliding Area/Handle"));
+            CatchScroll(gui);
             Hide(craft.Find("TabsButtons/TabBorder"));
             Hide(craft.Find("BraidLineHorisontalMedium"));
             Hide(craft.Find("Decription"));
@@ -245,11 +246,7 @@ namespace CarturUIHud
             if (icon != null)
                 icon.enabled = false;
             Station(craft.Find("topic"), board, tex, left);
-            Into(craft.Find("TabsButtons"), board, tex, TabRow, top: false,
-                 craft.Find("TabsButtons/Craft"), craft.Find("TabsButtons/UPGRADE"),
-                 craft.Find("TabsButtons/CarturUI_StylesTab"));
-            Tall(board, tex, craft.Find("TabsButtons/Craft"), craft.Find("TabsButtons/UPGRADE"),
-                 craft.Find("TabsButtons/CarturUI_StylesTab"));
+            LayTabs(gui);
 
             // Rows on the board's rows. AddRecipeToList puts element i at -i * m_recipeListSpace in
             // the list root (Cecil, InventoryGui.AddRecipeToList), so the pitch is set in that root's
@@ -470,21 +467,111 @@ namespace CarturUIHud
         }
 
         /// <summary>
-        /// Into keeps a piece's shape, and three tabs side by side are long and thin - fitted to
-        /// the row's width they came out a third of its height. Each tab is grown to the row's full
-        /// height about its own centre; the labels size themselves to it.
+        /// Every tab on the row, however many there are: Craft and Upgrade, Weapon Styles' Styles
+        /// tab, and whatever another mod adds under TabsButtons (Cartur, 2026-10-15: "the ui needs
+        /// to be flexible and accept more tabs and stylize it to our ui"). The tabs that are on
+        /// split the painted row between them in sibling order, each the row's height, and take the
+        /// Craft tab's art, sprite states, font and colour, so a mod's own tab reads as ours.
+        ///
+        /// Run after every UpdateCraftingPanel, last: that is where vanilla turns Craft and Upgrade
+        /// on and off per station, and where mods show their own tab. Positions and sizes are set
+        /// outright in world space, so a second pass moves nothing.
         /// </summary>
-        private static void Tall(RectTransform board, Texture2D tex, params Transform[] tabs)
-        {
-            float rowHeight = World(board, tex, TabRow).height * 0.8f;
-            foreach (Transform t in tabs)
-            {
-                var rt = t as RectTransform;
-                if (rt == null || rt.lossyScale.y <= 0f)
-                    continue;
-                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rowHeight / rt.lossyScale.y);
-            }
+        [HarmonyPatch(typeof(InventoryGui), "UpdateCraftingPanel")]
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.Last)]
+        private static void TabsAfterUpdate(InventoryGui __instance) => LayTabs(__instance);
 
+        private static void LayTabs(InventoryGui gui)
+        {
+            RectTransform craft = gui.m_crafting;
+            var board = craft != null ? craft.Find(BoardName) as RectTransform : null;
+            Transform row = craft != null ? craft.Find("TabsButtons") : null;
+            Texture2D tex = Tex;
+            if (board == null || row == null || tex == null || gui.m_tabCraft == null)
+                return;
+
+            var tabs = new System.Collections.Generic.List<RectTransform>();
+            foreach (Transform t in row)
+                if (t.gameObject.activeSelf && t.GetComponent<Selectable>() != null && t is RectTransform rt)
+                    tabs.Add(rt);
+            if (tabs.Count == 0)
+                return;
+
+            Rect target = World(board, tex, TabRow);
+            float gap = target.width * 0.02f;
+            float w = (target.width - gap * (tabs.Count - 1)) / tabs.Count;
+            float h = target.height * 0.8f;
+            var c = new Vector3[4];
+            for (int i = 0; i < tabs.Count; i++)
+            {
+                RectTransform rt = tabs[i];
+                if (rt.lossyScale.x <= 0f || rt.lossyScale.y <= 0f)
+                    continue;
+                if (rt != (RectTransform)gui.m_tabCraft.transform)
+                    StyleLike(rt, gui.m_tabCraft);
+                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, w / rt.lossyScale.x);
+                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h / rt.lossyScale.y);
+                rt.GetWorldCorners(c);
+                var want = new Vector3(target.xMin + i * (w + gap) + w * 0.5f, target.center.y, 0f);
+                var have = (c[0] + c[2]) * 0.5f;
+                rt.position += new Vector3(want.x - have.x, want.y - have.y, 0f);
+            }
+            SameLabels(tabs.ToArray());
+        }
+
+        /// <summary>A mod's tab drawn the way the Craft tab is: art, states and label font. Not the label's colour:
+        /// the Craft tab's is the selected tab's gold, which made every mod tab look selected (pilot shot).</summary>
+        private static void StyleLike(RectTransform tab, Button model)
+        {
+            var from = model.GetComponent<Image>();
+            var to = tab.GetComponent<Image>();
+            if (from != null && to != null)
+            {
+                to.sprite = from.sprite;
+                to.type = from.type;
+                to.color = from.color;
+                to.pixelsPerUnitMultiplier = from.pixelsPerUnitMultiplier;
+            }
+            // ButtonTextColor (vanilla) keeps the colour the label had at its Awake and shows it while
+            // the tab is clickable, gold while it is the selected one. A tab cloned while Craft was
+            // selected took gold as its resting colour and looked selected for good, so the resting
+            // colours are the Craft tab's own (ILSpy, ButtonTextColor.Awake/Update).
+            var mine = tab.GetComponent<ButtonTextColor>();
+            var theirs = model.GetComponent<ButtonTextColor>();
+            if (mine != null && theirs != null)
+                foreach (var f in TextColorFields)
+                    f?.SetValue(mine, f.GetValue(theirs));
+            var sel = tab.GetComponent<Selectable>();
+            if (sel != null)
+            {
+                sel.transition = model.transition;
+                sel.spriteState = model.spriteState;
+                sel.colors = model.colors;
+            }
+            TMP_Text label = null;
+            foreach (TMP_Text t in model.GetComponentsInChildren<TMP_Text>(true))
+                if (!UnderHint(t.transform, model.transform)) { label = t; break; }
+            if (label == null)
+                return;
+            foreach (TMP_Text t in tab.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (UnderHint(t.transform, tab)) continue;
+                t.font = label.font;
+                t.fontSharedMaterial = label.fontSharedMaterial;
+                t.fontStyle = label.fontStyle;
+                t.alignment = label.alignment;
+            }
+        }
+
+        private static readonly System.Reflection.FieldInfo[] TextColorFields =
+        {
+            AccessTools.Field(typeof(ButtonTextColor), "m_defaultColor"),
+            AccessTools.Field(typeof(ButtonTextColor), "m_defaultMeshColor"),
+        };
+
+        private static void SameLabels(params Transform[] tabs)
+        {
             // One size for every label: each sized itself to its own word, so UPGRADE came out
             // smaller than CRAFT (Cartur: "all the tabs need the same font"). The size the longest
             // word fits at is the size they all get.
@@ -562,6 +649,42 @@ namespace CarturUIHud
 
         private static readonly System.Collections.Generic.Dictionary<int, float> s_fontSize =
             new System.Collections.Generic.Dictionary<int, float>();
+
+        /// <summary>
+        /// The wheel scrolls the list only while the pointer is over something that raycasts inside
+        /// the ScrollRect: the event goes to what the pointer is on and bubbles up. Hide switches
+        /// the list's backing graphic off, which left the 25 px gaps between rows (82 px rows every
+        /// 107.5) with nothing to hit, so the list moved a few rows, a gap came under the pointer,
+        /// and it stopped until the mouse moved onto a row (Nexus bug, crysis2142, 2026-10-11).
+        /// The surface goes back on, clear, so the whole list area takes the wheel.
+        /// </summary>
+        private static void CatchScroll(InventoryGui gui)
+        {
+            // The ScrollRect is on m_recipeEnsureVisible's object (ScrollRectEnsureVisible requires
+            // one, read with ILSpy); it is not a parent of m_recipeListRoot, so a parent search
+            // finds nothing (pilot, 2026-10-15).
+            ScrollRect sr = gui.m_recipeEnsureVisible != null ? gui.m_recipeEnsureVisible.GetComponent<ScrollRect>() : null;
+            if (sr == null)
+                return;
+            Transform surface = sr.viewport != null ? sr.viewport : sr.transform;
+            Graphic g = surface.GetComponent<Graphic>();
+            bool was = g != null && g.enabled && g.raycastTarget;
+            if (g == null)
+                g = surface.gameObject.AddComponent<Image>();
+            if (!g.enabled)
+            {
+                g.color = Color.clear;
+                g.enabled = true;
+            }
+            g.raycastTarget = true;
+            if (!s_scrollLogged)
+            {
+                s_scrollLogged = true;
+                Log.LogInfo("recipe list scroll surface " + surface.name + " (was catching: " + was + ")");
+            }
+        }
+
+        private static bool s_scrollLogged;
 
         private static void Hide(Transform t)
         {

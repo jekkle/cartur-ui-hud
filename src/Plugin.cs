@@ -42,7 +42,7 @@ namespace CarturUIHud
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
         public const string PluginName = "Carturs UI - HUD";
-        public const string PluginVersion = "1.1.3";
+        public const string PluginVersion = "1.1.4";
 
         private void Awake()
         {
@@ -181,6 +181,7 @@ namespace CarturUIHud
                     + "equipment/quick/shield slots with the inventory, hotbar and equipment panel that "
                     + "hold them; crafting, chests, trader, menus, build menu, loading/sleep screens, "
                     + "popups, hover effect and the rest go back to vanilla. Restart to apply.").Value;
+                InventoryScreen.Panels = panels;
 
                 foreach (Type t in new[] { typeof(HudSkin), typeof(VanillaBars), typeof(EditInputBlock),
                                            typeof(Hotbar), typeof(HotbarRow), typeof(IconHoverPatch),

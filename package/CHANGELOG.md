@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.4
+
+- **The recipe list scrolls wherever the mouse is on it.** It used to stop every few lines until you
+  moved the mouse onto a recipe: the gaps between rows did not catch the wheel. Reported on Nexus.
+- **World Modifiers descriptions are readable.** The window covered them when creating a world; they
+  now sit beside it. Reported on Nexus.
+- **Any number of crafting tabs.** Tabs other mods add to the crafting panel share the tab row with
+  Craft, Upgrade and Styles, and are drawn in this UI's style.
+- **`Panels / newPanels` off now really leaves the crafting, chest and info windows vanilla.** Only the
+  bag kept the new art. Reported on Discord.
+- No more yellow "Could not find type" warnings in the log when Better Archery is not installed.
+
 ## 1.1.3
 
 - **Works with Quick Stack Store.** Its trash can no longer throws an error every time the
