@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.5
+
+- Nine new loading screens, original paintings, one per biome. They rotate with the nine official Valheim artworks already in the mod, which are now credited to Iron Gate in the README.
+- The README is rewritten: a fuller description of what the mod does, every setting and default checked against the code, and image captions that match the pictures. No code changes. Thunderstore also gets 1.1.4's fixes with this version, since 1.1.4 went out while the Thunderstore listing was down.
+
 ## 1.1.4
 
 - **The recipe list scrolls wherever the mouse is on it.** It used to stop every few lines until you
