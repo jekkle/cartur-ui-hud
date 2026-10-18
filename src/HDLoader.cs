@@ -39,6 +39,7 @@ namespace CarturUIHud
         private const long ReadAhead = 1L << 30;
 
         internal static BepInEx.Logging.ManualLogSource Log;
+        internal static int MaxSize;
         private static bool s_started, s_running, s_done;
         private static long s_totalBytes, s_doneBytes;
 
@@ -84,7 +85,12 @@ namespace CarturUIHud
                 // main copy gives the same dictionary for 0.5 GB less.
                 List<Item> main = Directory(s_mainPath, overridden);
                 main.AddRange(items);
+                int capped = 0;
+                for (int i = 0; i < main.Count; i++)
+                    if (Cap(main[i], out Item small)) { main[i] = small; capped++; }
                 foreach (Item it in main) s_totalBytes += it.Length;
+                if (capped > 0)
+                    Log.LogInfo($"maxTextureSize {MaxSize}: {capped} HD textures load at a smaller mip level");
 
                 s_started = s_running = true;
                 new Thread(() => Read(main)) { IsBackground = true, Name = "CarturHDLoader" }.Start();
@@ -264,6 +270,28 @@ namespace CarturUIHud
         }
 
         private static bool IsPow2(int v) => v > 0 && (v & (v - 1)) == 0;
+
+        /// <summary>
+        /// Every bundle texture is DXT5 with its whole mip chain stored largest first (theirs builds it with
+        /// mipChain true and LoadRawTextureData of the full Length, READ from HDValheimTextures.dll), so a level
+        /// is 16 bytes per 4x4 block and level 1 starts right after level 0. Skipping the top levels is a
+        /// later Offset and a shorter Length, and the same texture at half the size per level skipped.
+        /// </summary>
+        private static bool Cap(Item it, out Item small)
+        {
+            small = it;
+            if (MaxSize < 64 || !IsPow2(it.W) || !IsPow2(it.H) || Math.Max(it.W, it.H) <= MaxSize)
+                return false;
+            while (Math.Max(small.W, small.H) > MaxSize)
+            {
+                long level = (long)Math.Max(1, small.W / 4) * Math.Max(1, small.H / 4) * 16;
+                small.Offset += level;
+                small.Length -= level;
+                small.W /= 2;
+                small.H /= 2;
+            }
+            return true;
+        }
 
         private static void StandDown(Exception e)
         {

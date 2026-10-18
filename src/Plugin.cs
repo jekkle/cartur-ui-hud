@@ -55,6 +55,9 @@ namespace CarturUIHud
                 // First, so the HD texture load starts while the logo screens are still up. It
                 // catches its own failures and leaves HD Valheim Textures to load as before.
                 HDLoader.Log = Logger;
+                HDLoader.MaxSize = Config.Bind("HD textures", "maxTextureSize", 0,
+                    "Largest size HD Valheim Textures' textures load at, in pixels (2048, 4096...). Bigger ones load from their "
+                    + "smaller built-in mip level: less video memory and a faster load, softer up close. 0 loads them as shipped. Restart to apply.").Value;
                 HDLoader.Init(this, new Harmony(PluginGuid));
 
                 HudSkin.Log = Logger;
