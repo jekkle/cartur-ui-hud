@@ -54,7 +54,7 @@ namespace CarturUIHud
                 Log.LogWarning(member + " not found in this build of the game - " + consequence);
         }
 
-        private static void Changed(Inventory inventory) =>
+        internal static void Changed(Inventory inventory) =>
             s_changed?.Invoke(inventory, new object[] { false, false });
 
         private static bool IsLoading(Player player) =>
@@ -631,6 +631,46 @@ namespace CarturUIHud
 
             if (moved)
                 Changed(inv);
+        }
+    }
+
+    /// <summary>
+    /// The only patch that runs when [Inventory] extraSlots is off. A character that has been through
+    /// this mod has its worn kit, quick slot food and shield in rows below the grid. Player.OnSpawned
+    /// calls SetInventorySize(invrows), which shortens the grid to that and calls DropInvalidItems,
+    /// and that throws everything outside the grid on the floor (READ: Player.SetInventorySize,
+    /// Humanoid.DropInvalidItems; Inventory.Load keeps loaded items where they were saved, so nothing
+    /// else drops them). So before it runs, each such item goes to the first free cell of the grid,
+    /// bag first. If the grid has no room the grid keeps the rows the item needs instead: an item is
+    /// never dropped for lack of a cell. Equipped state is not touched, so worn gear stays worn.
+    /// </summary>
+    internal static class SlotRescue
+    {
+        [HarmonyPatch(typeof(Humanoid), "DropInvalidItems")]
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.High)]
+        private static void Rescue(Humanoid __instance)
+        {
+            Inventory inv = __instance == Player.m_localPlayer ? __instance.GetInventory() : null;
+            if (inv == null)
+                return;
+            int moved = 0, height = inv.GetHeight(), rows = height;
+            foreach (ItemDrop.ItemData item in inv.GetAllItems())
+            {
+                Vector2i p = item.m_gridPos;
+                // Only an item below an otherwise valid column is ours; anything else is vanilla's to judge.
+                if (p.x < 0 || p.y < height || p.x >= inv.GetWidth())
+                    continue;
+                Vector2i free = Slots.FirstFreeBagCell(inv, true);
+                if (free.x >= 0) { item.m_gridPos = free; moved++; }
+                else rows = Mathf.Max(rows, p.y + 1);
+            }
+            if (rows > height)
+                inv.SetHeight(rows);
+            if (moved > 0 || rows > height)
+                SlotPatches.Changed(inv);
+            if (moved > 0)
+                SlotPatches.Log.LogInfo("extra slots off: moved " + moved + " items from the old slot rows into the bag");
         }
     }
 }

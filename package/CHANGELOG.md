@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.6
+
+- **Crafting search, category and craft several.** The crafting board gets a search box, a category button (All, Weapons, Armor, Tools, Consumables, Materials, Misc) and - / + on the Craft plate to craft up to 50 at once through the game's own multicraft. `Panels / craftingTools` turns it off. Requested on Nexus.
+- **`Inventory / extraSlots`.** Off removes the equipment panel, quick slots and shield slot, so another inventory mod can own the inventory. Anything still in those slots moves into your bag; nothing is dropped. Requested on Discord.
+- **VNEI:** its window now fits inside the crafting board, and its tab stays in the tab row. Reported on Discord.
+- **Lineajes Races:** the character in the equipment panel shows your race. Reported on Nexus.
+- **Adventure Backpacks:** its Chest and Backpack tabs above a chest are left alone instead of being pulled into the chest header. Reported on Nexus. Please report it if the tabs still misbehave.
+
 ## 1.1.5
 
 - Nine new loading screens, original paintings, one per biome. They rotate with the nine official Valheim artworks already in the mod, which are now credited to Iron Gate in the README.

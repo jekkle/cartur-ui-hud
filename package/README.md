@@ -9,7 +9,7 @@ Read this before installing:
 - The layout is designed for GUI scale 100%. At higher scales the crafting and equipment panels can overlap.
 - Not every screen is reskinned yet. The list is below.
 
-Just want the HUD from before? Set `Panels / newPanels` to `false` in the config and restart. That keeps the bars, food diamonds, guardian power and edit mode, plus the inventory, hotbar and equipment panel (they hold the equipment, quick and shield slots), and puts every other screen back to vanilla. The slots stay on either way, because turning them off would drop whatever is in them on the ground.
+Just want the HUD from before? Set `Panels / newPanels` to `false` in the config and restart. That keeps the bars, food diamonds, guardian power and edit mode, plus the inventory, hotbar and equipment panel (they hold the equipment, quick and shield slots), and puts every other screen back to vanilla. To drop the extra slots too, for example because another mod handles your inventory, set `Inventory / extraSlots` to `false`.
 
 ![Inventory and crafting](https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/ui-inventory-crafting.png)
 
@@ -22,6 +22,8 @@ The HUD is made of bronze-framed health, stamina, eitr and adrenaline bars that 
 The inventory is a bag, a hotbar and an equipment panel with your character shown live in it. The panel has equipment slots, three quick slots (Z, V and B by default) and a shield slot. The quick slots are the food diamonds. The slot layout is the one Equipment and Quick Slots used, so a character that has used that mod keeps its worn items where they were.
 
 Crafting, chests and the trader are on painted boards with the controls seated on their plates. The build menu, skills, compendium, popups, pause and settings menus, and the loading and sleep screens use the same boards. Loading screens rotate through 18 pictures that ship with the mod: nine original paintings made for it, and nine pieces of official Valheim artwork (see Credits below). The sleep screen shows pictures and videos from the mod's own folder, a line from `dreams.txt` or the game's own dream text, or black, in proportions you can set. Every button gets a hover effect and the selected row gets a bronze highlight. Tabs that other mods add to the crafting panel share the tab row with Craft, Upgrade and Styles and are drawn in the same style.
+
+The crafting board has a search box and a category button (All, Weapons, Armor, Tools, Consumables, Materials, Misc) in its title bar, and - and + buttons on the Craft plate to craft several at once. The count goes up to what your materials and bag space allow, at most 50, and crafting uses the game's own multicraft. All three reset when you close the inventory.
 
 When Epic Loot is installed, its enchanting table gets one board per tab and its trader windows are reskinned too.
 
@@ -67,6 +69,8 @@ Config file: `BepInEx/config/com.jekkle.valheim.carturuihud.cfg`.
 | --- | --- | --- |
 | `Panels / newPanels` | true | Off: HUD, slots, inventory, hotbar and equipment panel only. Restart. |
 | `Panels / textScale` | 1 | Text size in the inventory, crafting, chest and trader windows, 0.8 to 1.6. Applies straight away. |
+| `Panels / craftingTools` | true | Search, category and craft-several on the crafting board. Restart. |
+| `Inventory / extraSlots` | true | The equipment panel, quick slots and shield slot. Off leaves the inventory size and slots to the game or another inventory mod. Anything still in those slots moves into your bag, and the bag grows if it is full. Restart. |
 | `Layout / editMode` | false | Arrange the pieces, see above. |
 | `Layout / resetLayout` | false | Tick to put every piece back. It unticks itself. |
 | `Layout / saveAsDefault` | false | Tick to make the layout on screen the one `resetLayout` goes back to. Open the inventory once first. |
@@ -88,7 +92,7 @@ Config file: `BepInEx/config/com.jekkle.valheim.carturuihud.cfg`.
 
 Declared incompatible, so BepInEx skips this mod if one of these is in the profile: Auga, AugaLite, Equipment and Quick Slots, Shield Me Bruh.
 
-It works alongside Epic Loot, Jotunn, Better Archery (its quiver sits in three ammo cells of the equipment panel), HD Valheim Textures and Cartur's Waste Management (its trash can and sort button sit in the inventory's side column). It also works with Quick Stack Store: its trash can joins the side column, and its quick stack, store all and sort leave the equipment and quick slots alone. Food in a quick slot and arrows in the quiver can still be restocked. Any other mod that redraws the same windows will fight it.
+It works alongside Epic Loot, Jotunn, Better Archery (its quiver sits in three ammo cells of the equipment panel), HD Valheim Textures and Cartur's Waste Management (its trash can and sort button sit in the inventory's side column). VNEI's window fits inside the crafting board and its tab sits in the tab row. With Lineajes Races, the character in the equipment panel shows your race. With Adventure Backpacks, its Chest and Backpack tabs above a chest are left alone. It also works with Quick Stack Store: its trash can joins the side column, and its quick stack, store all and sort leave the equipment and quick slots alone. Food in a quick slot and arrows in the quiver can still be restocked. Any other mod that redraws the same windows will fight it.
 
 ## Install
 

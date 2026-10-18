@@ -72,7 +72,7 @@ namespace CarturUIHud
                 get
                 {
                     Inventory inv = PlayerInventory;
-                    if (inv == null)
+                    if (inv == null || !Enabled)
                         return null;
                     Vector2i p = GridPos;
                     return inv.GetItemAt(p.x, p.y);
@@ -114,7 +114,11 @@ namespace CarturUIHud
         // Three rows of eight below the visible grid, the same shape EAQS used, so a character
         // that has been through that mod keeps every worn item in place. 24 cells, of which we
         // fill 10; the rest stay empty and are parked off-screen by EquipmentPanel.
-        internal const int HiddenRows = 3;
+        // Off ([Inventory] extraSlots, read once at start-up): no hidden rows and no slots, so the
+        // inventory is whatever size the game or another inventory mod makes it. Everything below
+        // that asks "is this cell a slot" then answers no, and VisibleRows is the real height.
+        internal static bool Enabled = true;
+        internal static int HiddenRows => Enabled ? 3 : 0;
         internal const int SlotCount = 24;
 
         /// <summary>
@@ -185,7 +189,7 @@ namespace CarturUIHud
         // inventory as a fixed 8 by 4 and the load path overwrites the answer a moment later.
         internal static int BaseRows { get; private set; } = 4;
 
-        internal static int VisibleRows => BaseRows;
+        internal static int VisibleRows => Enabled ? BaseRows : Mathf.Max(1, PlayerInventory?.GetHeight() ?? BaseRows);
         internal static int FullHeight => VisibleRows + HiddenRows;
         internal static int VisibleCells => VisibleRows * Width;
 

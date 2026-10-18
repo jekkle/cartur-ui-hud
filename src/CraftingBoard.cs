@@ -245,7 +245,18 @@ namespace CarturUIHud
             var icon = craft.Find("station_icon")?.GetComponent<Image>();
             if (icon != null)
                 icon.enabled = false;
-            Station(craft.Find("topic"), board, tex, left);
+            // Search, category and craft-N (CraftingTools): the name keeps the first part of the bar, the
+            // other two take the rest; the quantity buttons sit on the knotwork at the Craft plate's ends.
+            Rect nameArea = left;
+            if (Full && CraftingTools.On)
+            {
+                nameArea = Rect.MinMaxRect(left.xMin, left.yMin, left.xMin + left.width * 0.3f, left.yMax);
+                Rect cat = Rect.MinMaxRect(nameArea.xMax + pad, left.yMin + pad, nameArea.xMax + pad + left.width * 0.25f, left.yMax - pad);
+                Rect search = Rect.MinMaxRect(cat.xMax + pad, cat.yMin, left.xMax, cat.yMax);
+                CraftingTools.Lay(gui, craft, World(board, tex, search), World(board, tex, cat),
+                                  World(board, tex, Px(499, 1522, 545, 1605)), World(board, tex, Px(840, 1522, 886, 1605)));
+            }
+            Station(craft.Find("topic"), board, tex, nameArea);
             LayTabs(gui);
 
             // Rows on the board's rows. AddRecipeToList puts element i at -i * m_recipeListSpace in
@@ -518,6 +529,61 @@ namespace CarturUIHud
                 rt.position += new Vector3(want.x - have.x, want.y - have.y, 0f);
             }
             SameLabels(tabs.ToArray());
+            FitVnei(craft, board, tex);
+        }
+
+        // VNEI 0.17.6 (READ from VNEI.dll, 2026-10-17). Window: MainVneiHandler.CreateBaseUI hangs a BaseUI
+        // under Crafting with SetParent(worldPositionStays), sizes it (sizeDelta.x-10)/50 by
+        // (sizeDelta.y-160)/50 cells for vanilla's 570-wide panel, at (0,-50) in the panel's own units.
+        // Cartur's board paints the columns narrower, so the window is laid in world space on the painted
+        // area like every other piece. Tab: UpdateTabPosition sets the VNEI tab to the previous active
+        // sibling's anchoredPosition + (107,0) in local units. It runs from VNEI's UpdateCraftingPanel
+        // postfix (before our Priority.Last pass) but also from SetTabActive, i.e. on click and from its
+        // SetupCrafting postfix - after our pass, with our resized neighbour's position, so the tab landed
+        // a slot off. Our pass is therefore re-run as a postfix on UpdateTabPosition (PatchVnei).
+        private static bool s_vneiWin;
+        private static readonly Rect VneiArea = Px(105, 730.5f, 920, 1676);
+        // Read from VNEI's own assembly, set once in PatchVnei: AccessTools.TypeByName logs a HarmonyX
+        // warning for a missing type, and this is looked up on every tab pass.
+        private static System.Type VneiBaseUI;
+
+        internal static void PatchVnei(Harmony harmony)
+        {
+            if (!BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue("com.maxsch.valheim.vnei", out var info) || info?.Instance == null)
+                return;
+            System.Reflection.Assembly vnei = info.Instance.GetType().Assembly;
+            VneiBaseUI = vnei.GetType("VNEI.UI.BaseUI");
+            var m = AccessTools.Method(vnei.GetType("VNEI.UI.MainVneiHandler"), "UpdateTabPosition");
+            if (m == null)
+                return;
+            harmony.Patch(m, postfix: new HarmonyMethod(typeof(CraftingBoard), nameof(AfterVneiTab)));
+            Log.LogInfo("VNEI found: its tab and window follow the crafting board");
+        }
+
+        private static void AfterVneiTab()
+        {
+            if (InventoryGui.instance != null)
+                LayTabs(InventoryGui.instance);
+        }
+
+        private static void FitVnei(RectTransform craft, RectTransform board, Texture2D tex)
+        {
+            RectTransform win = VneiBaseUI != null ? craft.GetComponentInChildren(VneiBaseUI, true)?.transform as RectTransform : null;
+            RectTransform handle = win != null ? AccessTools.Field(VneiBaseUI, "dragHandler")?.GetValue(win.GetComponent(VneiBaseUI)) as RectTransform : null;
+            if (handle == null || !Measure(win, new Transform[] { handle }, out Rect have) || have.width <= 0f)
+                return;
+            Rect target = World(board, tex, VneiArea);
+            float f = Mathf.Min(target.width / have.width, target.height / have.height);
+            // Into multiplies localScale, so it is not run on every pass once the window is on the area.
+            if (Mathf.Abs(f - 1f) < 0.01f && Mathf.Abs(target.center.x - have.center.x) < 0.5f)
+                return;
+            Into(win, board, tex, VneiArea, top: true, handle);
+            if (!s_vneiWin)
+            {
+                s_vneiWin = true;
+                Log.LogInfo("VNEI window fitted to the board: scale x" + f.ToString("0.00") + ", local scale " + win.localScale
+                            + ", lossy " + win.lossyScale + ", crafting lossy " + craft.lossyScale + ", crafting size " + craft.sizeDelta);
+            }
         }
 
         /// <summary>A mod's tab drawn the way the Craft tab is: art, states and label font. Not the label's colour:

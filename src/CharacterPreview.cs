@@ -241,6 +241,60 @@ namespace CarturUIHud
                 $"character preview ready: body {_hi - _lo:0.00} m ({_lo:0.00}..{_hi:0.00}), zoom {MinZoom}-{MaxZoom}");
         }
 
+        // Lineages Races (Nexus 3395 "Custom Races", Azathoth.LinejaeserasRace 1.0.6, READ from its DLL).
+        // A race is not a model index: LNE_RaceVisualController (a component on the player prefab, so the
+        // copy has one) attaches the race prefab through VisEquipment.AttachArmor, rebinds its meshes and
+        // hides body bones. It finds the race from the player's ZDO, its racial item or m_customData
+        // "LNE_CurrentRacePrefab"/"LNE_CurrentRaceHash". The copy has no ZDO, no inventory and an empty
+        // m_customData, so it found none and drew the plain body. The mod's own AzuEPI preview bridge
+        // (LNE_AzuEPIPreviewBridge.ApplyRaceToAzuPreviewSafe) fixes its preview the same way: write those two
+        // keys on the preview player, then Refresh() the controller. Done here by name, no-op without it.
+        // Read once from the mod's own assembly: AccessTools.TypeByName logs a HarmonyX warning for a
+        // missing type, and this runs on every preview refresh.
+        private static Type s_raceController, s_raceItem;
+        private static bool s_raceLooked;
+        private static string s_lastRace = "";
+
+        private static void CopyRace(Player real, Player copy)
+        {
+            if (!s_raceLooked)
+            {
+                s_raceLooked = true;
+                if (BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue("Azathoth.LinejaeserasRace", out var info) && info?.Instance != null)
+                {
+                    var asm = info.Instance.GetType().Assembly;
+                    s_raceController = asm.GetType("LinejaeserasRace.Systems.LNE_RaceVisualController");
+                    s_raceItem = asm.GetType("LinejaeserasRace.Systems.LNE_RacialEquipment");
+                }
+            }
+            if (s_raceController == null || real == null || copy == null)
+                return;
+            string prefab = null;
+            if (s_raceItem != null && real.GetComponent(s_raceItem) is Component eq
+                && AccessTools.Property(s_raceItem, "CurrentRaceItem")?.GetValue(eq, null) is ItemDrop.ItemData item
+                && item.m_dropPrefab != null)
+                prefab = item.m_dropPrefab.name;
+            if (string.IsNullOrEmpty(prefab) && real.m_customData != null)
+                real.m_customData.TryGetValue("LNE_CurrentRacePrefab", out prefab);
+            if (string.IsNullOrEmpty(prefab))
+            {
+                ZNetView nv = real.GetComponent<ZNetView>();
+                ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+                prefab = zdo?.GetString("LNE_CurrentRacePrefab", "");
+            }
+            if (copy.m_customData == null)
+                copy.m_customData = new System.Collections.Generic.Dictionary<string, string>();
+            if ((prefab ?? "") != s_lastRace)
+            {
+                s_lastRace = prefab ?? "";
+                CharacterPreview.Log?.LogInfo("character preview race: '" + s_lastRace + "'");
+            }
+            copy.m_customData["LNE_CurrentRacePrefab"] = prefab ?? "";
+            copy.m_customData["LNE_CurrentRaceHash"] = string.IsNullOrEmpty(prefab) ? "0" : prefab.GetStableHashCode().ToString();
+            Component ctl = copy.GetComponent(s_raceController) ?? copy.gameObject.AddComponent(s_raceController);
+            AccessTools.Method(s_raceController, "Refresh")?.Invoke(ctl, null);
+        }
+
         private float VisH => (_hi - _lo) * Fit / _zoom;
 
         private void LateUpdate()
@@ -253,6 +307,7 @@ namespace CarturUIHud
             {
                 CharacterPreview.Dirty = false;
                 s_setup?.Invoke(Player.m_localPlayer, new object[] { _vis, false });
+                CopyRace(Player.m_localPlayer, _pv);
             }
 
             // Keep the visible window inside the body: at zoom 1 there is no room to slide.

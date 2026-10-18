@@ -159,10 +159,16 @@ namespace CarturUIHud
             foreach (Button b in new[] { gui.m_takeAllButton, gui.m_stackAllButton })
                 if (b != null && b.gameObject.activeInHierarchy)
                     left.Add((RectTransform)b.transform);
+            // Waste Management clones its buttons into stackAll.parent (its Plugin.cs MakeContainerButton).
+            Transform home = gui.m_stackAllButton != null ? gui.m_stackAllButton.transform.parent : gui.m_container;
             foreach (Button b in gui.m_container.GetComponentsInChildren<Button>(false))
             {
                 var rt = (RectTransform)b.transform;
-                if (left.Contains(rt) || b.transform.IsChildOf(grid.m_gridRoot) || b.transform.IsChildOf(board) || rt.rect.width <= 1f)
+                // Only buttons placed straight on the window. A mod that brings its own bar keeps it:
+                // Adventure Backpacks' Chest/Backpack tabs sit in a HorizontalLayoutGroup
+                // (AB_ContainerTabs), and taking them turned the header to text plates and pushed
+                // Sort/Sort All off the board (pilot, 2026-10-16, Nexus bug crysis2142).
+                if (b.transform.parent != home || left.Contains(rt) || b.transform.IsChildOf(grid.m_gridRoot) || b.transform.IsChildOf(board) || rt.rect.width <= 1f)
                     continue;
                 right.Add(rt);
             }

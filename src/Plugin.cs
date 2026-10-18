@@ -38,11 +38,15 @@ namespace CarturUIHud
     [BepInDependency("com.jotunn.jotunn", BepInDependency.DependencyFlags.SoftDependency)]
     // Soft, load order only: QssCompat patches Quick Stack Store's slot checks and trash can by name.
     [BepInDependency(QssCompat.Guid, BepInDependency.DependencyFlags.SoftDependency)]
+    // Soft, load order only: CraftingBoard patches VNEI's tab placement and CharacterPreview calls Lineages
+    // Races' visual controller by name.
+    [BepInDependency("com.maxsch.valheim.vnei", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("Azathoth.LinejaeserasRace", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
         public const string PluginName = "Carturs UI - HUD";
-        public const string PluginVersion = "1.1.5";
+        public const string PluginVersion = "1.1.6";
 
         private void Awake()
         {
@@ -190,6 +194,14 @@ namespace CarturUIHud
                     Guard(t.Name, () => harmony.PatchAll(t));
                 if (panels)
                 {
+                    // Search, category and craft-N on the crafting board; needs the full board, so it is
+                    // a no-op on the fallback art. Read at start-up.
+                    CraftingTools.On = Config.Bind("Panels", "craftingTools", true,
+                        "Crafting menu: a search box, a category button and a quantity control (craft several at "
+                        + "once, using the game's own multicraft). Restart to apply.").Value;
+                    CraftingTools.Log = Logger;
+                    if (CraftingTools.On)
+                        Guard("CraftingTools", () => harmony.PatchAll(typeof(CraftingTools)));
                     foreach (Type t in new[] { typeof(CraftingBoard), typeof(ChestBoard), typeof(HoverFx),
                                                typeof(StoreBoard), typeof(MenuBoards), typeof(LoadingScreen),
                                                typeof(LoadingArt), typeof(SleepVideo), typeof(Inlays),
@@ -199,6 +211,7 @@ namespace CarturUIHud
                         Guard(t.Name, () => harmony.PatchAll(t));
                     // EpicLoot's enchanting table and Jotunn's failed-connection window, if those mods
                     // are installed: hand-patched, because the types are in mods this one does not reference.
+                    Guard("VNEI", () => CraftingBoard.PatchVnei(harmony));
                     Guard("EnchantingScreen", () => EnchantingScreen.Init(harmony));
                     Guard("JotunnWindows", () => JotunnWindows.Init(harmony));
                     Guard("MapBorder", () => harmony.PatchAll(typeof(MapBorder)));
@@ -209,7 +222,21 @@ namespace CarturUIHud
                 Guard("IconRender", () => harmony.PatchAll(typeof(IconRender)));
 #endif
 
-                // The equipment, quick and shield slots.
+                // The equipment, quick and shield slots, and the three rows below the grid they live in.
+                // Off leaves the inventory at whatever size the game or another inventory mod gives it
+                // (Discord, Newton). Read at start-up; a change needs a restart. SlotRescue is the one
+                // patch that stays: it moves items out of the old slot rows so none are dropped.
+                Slots.Enabled = Config.Bind("Inventory", "extraSlots", true,
+                    "Equipment, quick and shield slots in three extra inventory rows. Turn off to leave the inventory "
+                    + "size and slots to the game or another inventory mod: the equipment panel, quick slots and "
+                    + "shield slot go away, and anything still in those rows moves into the bag. Restart to apply.").Value;
+                if (!Slots.Enabled)
+                {
+                    Guard("SlotRescue", () => harmony.PatchAll(typeof(SlotRescue)));
+                    Logger.LogInfo("extraSlots off: no equipment/quick/shield slots, inventory size left to the game");
+                }
+                else
+                {
                 Guard("slot system", () =>
                 {
                     QuickSlots.Init(Config);
@@ -229,6 +256,9 @@ namespace CarturUIHud
                     Guard(t.Name, () => harmony.PatchAll(t));
                 Guard("ShieldSlot.Init", ShieldSlot.Init);
                 SlotPatches.CheckLookups();
+                }
+                // Bound after the save above (SaveOnConfigSet is off), so written here or never.
+                Config.Save();
                 if (!StyleTab.Found)
                     Logger.LogWarning("Inventory.Changed not found - a style change will not refresh the icon");
                 if (!CookTimer.Found)

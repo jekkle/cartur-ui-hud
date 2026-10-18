@@ -1,41 +1,47 @@
-[size=4][b]A hand-drawn wood-and-bronze Valheim UI. Norse knotwork boards behind the windows, bronze frames on the bars and food, and every piece placed and sized by you.[/b][/size]
+A hand-drawn wood-and-bronze interface for Valheim: bronze HUD bars and food diamonds, an inventory with built-in equipment, quick and shield slots, and reskinned crafting, chest, trader and menu screens.
 
-[b]Just want the HUD from before?[/b] Set [b]Panels / newPanels[/b] to false in the config and restart. That keeps the bars, food diamonds, guardian power and edit mode, plus the inventory, hotbar and equipment panel (they hold the new equipment, quick and shield slots), and puts every other screen back to vanilla. The slots stay on either way: turning them off would drop whatever is in them on the ground.
-
-[size=4][b]Read before installing[/b][/size]
+Read this before installing:
 
 [list]
-[*][b]Remove Equipment and Quick Slots and Shield Me Bruh first.[/b] Their slots are built in now. If either is still installed, BepInEx skips [i]this[/i] mod and starts the game without it.[/*]
-[*][b]Uninstalling drops what is in the equipment, quick and shield slots[/b] on the ground where you log in (the same as removing Equipment and Quick Slots). Take your gear off first, or pick it back up.[/*]
-[*]Made for GUI scale 100%. Above about 130% the crafting and equipment panels overlap.[/*]
-[*]Not every screen is reskinned yet - see below.[/*]
+[*]Remove Equipment and Quick Slots and Shield Me Bruh first. Their slots are built in now. If either is still installed, BepInEx skips this mod and starts the game without it.[/*]
+[*]Uninstalling this mod drops what is in the equipment, quick and shield slots on the ground where you log in, the same as removing Equipment and Quick Slots. Take your gear off first, or pick it back up.[/*]
+[*]The layout is designed for GUI scale 100%. At higher scales the crafting and equipment panels can overlap.[/*]
+[*]Not every screen is reskinned yet. The list is below.[/*]
 [/list]
+
+Just want the HUD from before? Set Panels / newPanels to false in the config and restart. That keeps the bars, food diamonds, guardian power and edit mode, plus the inventory, hotbar and equipment panel (they hold the equipment, quick and shield slots), and puts every other screen back to vanilla. The slots stay on either way, because turning them off would drop whatever is in them on the ground.
 
 [img]https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/ui-inventory-crafting.png[/img]
 
-[size=4][b]What you get[/b][/size]
+[img]https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/hud-closeup.png[/img]
 
-[list]
-[*][b]HUD[/b] - health, stamina, eitr and adrenaline bars in bronze frames that grow with your maximum; three food diamonds with countdowns; the guardian power with Ready or cooldown.[/*]
-[*][b]Inventory[/b] - bag, hotbar and an equipment panel with your character live in it, plus equipment, quick (Z / V / B) and shield slots. The quick slots are the food diamonds.[/*]
-[*][b]Crafting, chests, the trader[/b] - on painted boards, controls seated on their plates.[/*]
-[*][b]Build menu, skills, compendium, popups, pause and settings menus, loading and sleep screens[/b] - on the same boards.[/*]
-[*][b]Epic Loot's enchanting table and trader windows[/b], when Epic Loot is installed - one board per enchanting tab.[/*]
-[*][b]HD Valheim Textures without the freeze[/b] - its textures load during the logo screen with a progress bar, instead of the game hanging for half a minute or more on the main menu.[/*]
-[*]A hover effect on every button, and a bronze highlight on the selected row.[/*]
-[/list]
+[size=5][b]What it does[/b][/size]
+
+The HUD is made of bronze-framed health, stamina, eitr and adrenaline bars that grow with your maximum, three food diamonds with countdowns, and a guardian power box that shows Ready or the cooldown. Eitr and adrenaline only appear once you have that pool.
+
+The inventory is a bag, a hotbar and an equipment panel with your character shown live in it. The panel has equipment slots, three quick slots (Z, V and B by default) and a shield slot. The quick slots are the food diamonds. The slot layout is the one Equipment and Quick Slots used, so a character that has used that mod keeps its worn items where they were.
+
+Crafting, chests and the trader are on painted boards with the controls seated on their plates. The build menu, skills, compendium, popups, pause and settings menus, and the loading and sleep screens use the same boards. Loading screens rotate through 18 pictures that ship with the mod: nine original paintings made for it, and nine pieces of official Valheim artwork (see Credits below). The sleep screen shows pictures and videos from the mod's own folder, a line from dreams.txt or the game's own dream text, or black, in proportions you can set. Every button gets a hover effect and the selected row gets a bronze highlight. Tabs that other mods add to the crafting panel share the tab row with Craft, Upgrade and Styles and are drawn in the same style.
+
+When Epic Loot is installed, its enchanting table gets one board per tab and its trader windows are reskinned too.
 
 [img]https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/ui-enchanting-table.png[/img]
 
 [img]https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/ui-build-menu.png[/img]
 
-[img]https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/hud-closeup.png[/img]
+[img]https://raw.githubusercontent.com/jekkle/cartur-ui-hud/master/docs/images/ui-trader.png[/img]
 
-[b]Still on vanilla art:[/b] the large map and minimap frames, the connecting screen, and some small dialogs. Controllers work, but the mod is made and tested with mouse and keyboard.
+With HD Valheim Textures installed, its textures load during the logo screen with a progress bar, instead of the game hanging for half a minute or more on the main menu.
 
-[size=4][b]Arranging it[/b][/size]
+Auto equip puts armour back on when you pick up the kit you died in, draws the weapon and shield you died holding, and puts a carry weight item such as the Megingjord back on as soon as you pick it up. Each of the three has its own switch.
 
-Turn on [b]editMode[/b] in the config - with Configuration Manager that is a tick box in game, or edit the config file and it applies immediately without a restart.
+On your first launch Hugin delivers a short welcome message. It shows once.
+
+Still on vanilla art are the large map and minimap frames, the connecting screen and some small dialogs. Controllers work, but the mod is built around mouse and keyboard.
+
+[size=5][b]Arranging it[/b][/size]
+
+Turn on editMode in the config. It is a tick box in game with [url=https://thunderstore.io/c/valheim/p/shudnal/ConfigurationManager/]ConfigurationManager[/url], or you can edit the file directly. It applies immediately, with no restart.
 
 [list]
 [*][b]drag[/b] - move a piece[/*]
@@ -45,35 +51,61 @@ Turn on [b]editMode[/b] in the config - with Configuration Manager that is a tic
 [*][b]ctrl + drag[/b] - nudge the frame against the fill[/*]
 [/list]
 
-Player input is held while edit mode is on, so a drag does not swing your axe. Turn it off when you are done; the layout saves either way. [b]resetLayout[/b] puts every piece back.
+Your input is held while edit mode is on, so a drag doesn't swing your axe. Turn it off when you're done. The layout saves either way. resetLayout puts every piece back where the mod would place it, and saveAsDefault makes the current layout the one resetLayout returns to.
 
-[size=4][b]Config[/b][/size]
+[size=5][b]Your own art[/b][/size]
 
-BepInEx/config/com.jekkle.valheim.carturuihud.cfg
+Put a PNG in BepInEx/config/CarturUI/ with the same name as one of the mod's own files in plugins/CarturUIHud/assets/, and it is used instead. Restart the game to see it. The BepInEx log says custom art: <name> for each file it picked up.
+
+Make it the same size as the file it replaces, because the bar frames and boards are cut at fixed pixel positions. food_frame.png, bar_fill.png and bar_fill_enemy.png can be any size. A file that doesn't fit is skipped with a warning in the log, and the original is used. Delete your file to go back.
+
+[size=5][b]Settings[/b][/size]
+
+Config file: BepInEx/config/com.jekkle.valheim.carturuihud.cfg.
 
 [list]
-[*][b]Panels / newPanels[/b] (true) - off: HUD, slots, inventory, hotbar and equipment panel only. Restart to apply.[/*]
-[*][b]Layout / editMode[/b] (false) - arrange the pieces. See above.[/*]
-[*][b]Layout / resetLayout[/b] (false) - tick to put every piece back.[/*]
-[*][b]Art / darkMode[/b] (false) - keep vanilla's dimmed panel material.[/*]
+[*][b]Panels / newPanels[/b] (true) - Off: HUD, slots, inventory, hotbar and equipment panel only. Restart.[/*]
+[*][b]Panels / textScale[/b] (1) - Text size in the inventory, crafting, chest and trader windows, 0.8 to 1.6. Applies straight away.[/*]
+[*][b]Layout / editMode[/b] (false) - Arrange the pieces, see above.[/*]
+[*][b]Layout / resetLayout[/b] (false) - Tick to put every piece back. It unticks itself.[/*]
+[*][b]Layout / saveAsDefault[/b] (false) - Tick to make the layout on screen the one resetLayout goes back to. Open the inventory once first.[/*]
+[*][b]Layout / quickSlotDetail[/b] (true) - Eat/countdown text on the food diamond's bottom bevel. Off puts the countdown above the bottom corner. Read at startup.[/*]
+[*][b]Art / darkMode[/b] (false) - Keep vanilla's dimmed panel material.[/*]
+[*][b]Art / woodPanel[/b] (true) - Use the generated wood panel for every menu panel. Off returns to the panel built from the bar and diamond art.[/*]
+[*][b]Quick slots / key1, key2, key3[/b] (Z, V, B) - Hotkeys for the three quick slots.[/*]
+[*][b]Auto equip / armourOnPickup[/b] (true) - Put armour back on when you pick up the kit you died in.[/*]
+[*][b]Auto equip / weaponAndShieldOnPickup[/b] (true) - Draw the weapon and shield you died holding when you pick them up.[/*]
+[*][b]Auto equip / carryWeightOnPickup[/b] (true) - Put a carry weight item back on as soon as it is picked up.[/*]
+[*][b]Loading screens / enabled[/b] (true) - Show the mod's pictures on the loading screen. Off leaves vanilla's.[/*]
+[*][b]Sleep screen / show[/b] (Media) - Media shows the mod's pictures and videos, Vanilla the game's own screen, Nothing is black.[/*]
+[*][b]Sleep screen / volume[/b] (0.5) - Volume of a sleep video, 0 to 1.[/*]
+[*][b]Sleep screen / videoChance[/b] (0.08) - Chance a night shows a video.[/*]
+[*][b]Sleep screen / vanillaDreamChance[/b] (0.33) - Chance a night shows the game's own dream text instead of one from dreams.txt.[/*]
+[*][b]Sleep screen / blackChance[/b] (0.15) - Chance a night shows nothing at all.[/*]
 [/list]
 
-[size=4][b]Compatibility[/b][/size]
+[size=5][b]Compatibility[/b][/size]
 
-Declared incompatible, so BepInEx skips this mod if one of these is installed: [b]Auga[/b], [b]AugaLite[/b], [b]Equipment and Quick Slots[/b], [b]Shield Me Bruh[/b].
+Declared incompatible, so BepInEx skips this mod if one of these is in the profile: Auga, AugaLite, Equipment and Quick Slots, Shield Me Bruh.
 
-Works alongside [b]Epic Loot[/b], [b]Jotunn[/b], [b]BetterArchery[/b] (its quiver sits in three ammo cells of the equipment panel), [b]HD Valheim Textures[/b] and [b]Cartur's Waste Management[/b] (its trash can and sort button sit in the inventory's side column). Any other mod that redraws the same windows will fight it.
+It works alongside Epic Loot, Jotunn, Better Archery (its quiver sits in three ammo cells of the equipment panel), HD Valheim Textures and Cartur's Waste Management (its trash can and sort button sit in the inventory's side column). It also works with Quick Stack Store: its trash can joins the side column, and its quick stack, store all and sort leave the equipment and quick slots alone. Food in a quick slot and arrows in the quiver can still be restocked. Any other mod that redraws the same windows will fight it.
 
-[size=4][b]Installation[/b][/size]
+[size=5][b]Install[/b][/size]
 
-Requires BepInEx. Unpack into your Valheim folder so the DLL lands in BepInEx/plugins/CarturUIHud, with its assets folder beside it. Client-side; no server install needed, works in multiplayer.
+Use a mod manager (r2modman, Thunderstore or Gale) and it pulls in BepInEx for you. It is client-side. No server install is needed, and it works in multiplayer.
 
-[size=4][b]Discord[/b][/size]
+[size=5][b]Credits[/b][/size]
+
+Nine of the loading screens are official Valheim artwork by Iron Gate Studios, taken from valheimgame.com. They belong to Iron Gate. This mod is free and non-commercial, and the Valheim EULA from Coffee Stain Publishing welcomes non-commercial projects using the game's content. Turn Loading screens / enabled off to see vanilla's loading screens instead.
+
+This is an unofficial fan mod. It is not made, endorsed or supported by Iron Gate Studios or Coffee Stain Publishing.
+
+[size=5][b]Discord[/b][/size]
 [url=https://discord.gg/nd5RqpwNkz]Cartur's Mods Discord[/url] - bug reports, install help, and mod requests. Bug reports get their own thread so nothing is lost, and requests are voted on.
 
-[size=4][b]More from Cartur[/b][/size]
+[size=5][b]More from Cartur[/b][/size]
 
-[url=https://www.nexusmods.com/valheim/mods/3679]HD Blood[/url] - higher resolution ground blood and a real burst on every hit.
+[url=https://www.nexusmods.com/valheim/mods/3679]HD Blood[/url] - higher resolution ground blood, and a real burst of blood on every hit and kill.
 [url=https://www.nexusmods.com/valheim/mods/3681]Map Pins[/url] - pins the world onto your map as you explore it.
 [url=https://www.nexusmods.com/valheim/mods/3684]Compass and Clock[/url] - a compass bar across the top of the screen.
 [url=https://www.nexusmods.com/valheim/mods/3685]Safe Stamina[/url] - stamina costs nothing while no enemy is near.
@@ -81,7 +113,9 @@ Requires BepInEx. Unpack into your Valheim folder so the DLL lands in BepInEx/pl
 [url=https://www.nexusmods.com/valheim/mods/3760]Flooring[/url] - floors keep the rain off, and fires sit on them.
 [url=https://www.nexusmods.com/valheim/mods/3888]Waste Management[/url] - a trash can and a sort button in the inventory.
 [url=https://www.nexusmods.com/valheim/mods/4010]Feeding Trough[/url] - a trough your animals eat out of.
-[url=https://www.nexusmods.com/valheim/mods/4055]Build Camera[/url] - detach the camera and build from anywhere near your workbench.
 [url=https://www.nexusmods.com/valheim/mods/4088]Combat Text[/url] - bigger damage numbers and a fast crit pop.
+[url=https://www.nexusmods.com/valheim/mods/4389]Farming[/url] - faster crops, bigger harvests, and whole fields planted at once.
+[url=https://www.nexusmods.com/valheim/mods/4390]Mining[/url] - harder pickaxe hits, more ore, and deposits that shatter.
+[url=https://www.nexusmods.com/valheim/mods/4391]Sailing[/url] - a Sailing skill: faster ships, tougher hulls, a wider map reveal.
 
 Free, and always will be - if it improved your game you can [url=https://www.patreon.com/c/cartur]tip me on Patreon[/url].
