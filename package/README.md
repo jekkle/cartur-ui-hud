@@ -39,6 +39,10 @@ Auto equip puts armour back on when you pick up the kit you died in, draws the w
 
 On your first launch Hugin delivers a short welcome message. It shows once.
 
+The character-select screen is rebuilt: your five most recently played characters gather round the menu campfire, four of them two to a log, with the game's cauldron cooking over the fire. Every character is in one menu on the right, one line each with its save type and when it was last played, and Start, New, Remove, Manage saves and Back sit under the list. Hover a character or its name and it stands up and emotes; double-click to play. This is the same screen as the separate Cartur's Character Select mod; with both installed, only one copy runs. It is one of the new panels, so `newPanels` off turns it off.
+
+![The character-select screen: four characters sit on two logs round a campfire with a cauldron over it, the most recently played stands, and the character menu is on the right.](https://raw.githubusercontent.com/jekkle/cartur-char-select/master/docs/images/camp.jpg)
+
 Still on vanilla art are the large map and minimap frames, the connecting screen and some small dialogs. Controllers work, but the mod is built around mouse and keyboard.
 
 ## Arranging it
@@ -87,12 +91,13 @@ Config file: `BepInEx/config/com.jekkle.valheim.carturuihud.cfg`.
 | `Sleep screen / videoChance` | 0.08 | Chance a night shows a video. |
 | `Sleep screen / vanillaDreamChance` | 0.33 | Chance a night shows the game's own dream text instead of one from `dreams.txt`. |
 | `Sleep screen / blackChance` | 0.15 | Chance a night shows nothing at all. |
+| `HD textures / maxTextureSize` | 0 | Largest size HD Valheim Textures' textures load at, in pixels (2048, 4096...); bigger ones load from a smaller mip level, using less video memory and loading faster but softer up close. 0 loads them as shipped. Restart. |
 
 ## Compatibility
 
 Declared incompatible, so BepInEx skips this mod if one of these is in the profile: Auga, AugaLite, Equipment and Quick Slots, Shield Me Bruh.
 
-It works alongside Epic Loot, Jotunn, Better Archery (its quiver sits in three ammo cells of the equipment panel), HD Valheim Textures and Cartur's Waste Management (its trash can and sort button sit in the inventory's side column). VNEI's window fits inside the crafting board and its tab sits in the tab row. With Lineajes Races, the character in the equipment panel shows your race. With Adventure Backpacks, its Chest and Backpack tabs above a chest are left alone. It also works with Quick Stack Store: its trash can joins the side column, and its quick stack, store all and sort leave the equipment and quick slots alone. Food in a quick slot and arrows in the quiver can still be restocked. Any other mod that redraws the same windows will fight it.
+It works alongside Epic Loot, Jotunn, Better Archery (its quiver sits in three ammo cells of the equipment panel), HD Valheim Textures and Cartur's Waste Management (its trash can and sort button sit in the inventory's side column). VNEI's window fits inside the crafting board and its tab sits in the tab row. With Lineajes Races, the character in the equipment panel shows your race. With Adventure Backpacks, its Chest and Backpack tabs above a chest are left alone. It also works with Quick Stack Store: its trash can joins the side column, and its quick stack, store all and sort leave the equipment and quick slots alone. Food in a quick slot and arrows in the quiver can still be restocked. Any other mod that redraws the same windows will fight it, and that includes other character-select mods.
 
 ## Install
 

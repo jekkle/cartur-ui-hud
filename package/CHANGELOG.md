@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.7
+
+- **New character-select screen.** Your five most recently played characters round the menu campfire (four on two logs, the newest standing) with the game's cauldron cooking over the fire, and every character in one menu on the right: name, save type and last played on one line, Start / New / Remove / Manage saves / Back under the list. Hover a character to make it stand and emote; double-click to play. Also released on its own as Cartur's Character Select; with both installed only one copy runs. Part of the new panels (`newPanels`).
+- **Minimap border** sits round the map instead of on it, so it no longer covers the map's corners, the wind arrow or pins near the edge.
+- **`HD textures / maxTextureSize`** (default 0, off): caps the size HD Valheim Textures' textures load at, for less video memory.
+
 ## 1.1.6
 
 - **Crafting search, category and craft several.** The crafting board gets a search box, a category button (All, Weapons, Armor, Tools, Consumables, Materials, Misc) and - / + on the Craft plate to craft up to 50 at once through the game's own multicraft. `Panels / craftingTools` turns it off. Requested on Nexus.
