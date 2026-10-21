@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.8
+
+- New icon in the Cartur's Mods style. The mod itself is unchanged from 1.1.7 (BepInEx still reports 1.1.7).
+
 ## 1.1.7
 
 - **New character-select screen.** Your five most recently played characters round the menu campfire (four on two logs, the newest standing) with the game's cauldron cooking over the fire, and every character in one menu on the right: name, save type and last played on one line, Start / New / Remove / Manage saves / Back under the list. Hover a character to make it stand and emote; double-click to play. Also released on its own as Cartur's Character Select; with both installed only one copy runs. Part of the new panels (`newPanels`).
