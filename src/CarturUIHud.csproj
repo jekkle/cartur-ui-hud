@@ -29,12 +29,22 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Cartur's Character Select, one source shared with the standalone mod and the other UI;
+         Core.Install arbitrates so only one copy runs (owner, 2026-10-20: the UIs carry their own). -->
+    <Compile Include="..\..\cartur-char-select\src\CharSelect.cs" Link="CharSelect.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="BepInEx.Analyzers" Version="1.0.8" PrivateAssets="all" />
     <PackageReference Include="BepInEx.Core" Version="5.4.21" />
     <PackageReference Include="HarmonyX" Version="2.10.1" />
   </ItemGroup>
 
   <ItemGroup>
+    <Reference Include="SoftReferenceableAssets">
+      <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\SoftReferenceableAssets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="assembly_valheim">
       <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\assembly_valheim.dll</HintPath>
       <Private>false</Private>

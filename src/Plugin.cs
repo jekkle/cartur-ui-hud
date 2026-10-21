@@ -189,6 +189,10 @@ namespace CarturUIHud
                     + "hold them; crafting, chests, trader, menus, build menu, loading/sleep screens, "
                     + "popups, hover effect and the rest go back to vanilla. Restart to apply.").Value;
                 InventoryScreen.Panels = panels;
+                // The character-select menu is one of the "new panels"; the standalone Cartur's
+                // Character Select outranks this copy when both are installed (CharSelect.cs).
+                if (panels)
+                    CarturCharSelect.Core.Install(Logger, System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Info.Location), "assets"), 1);
 
                 foreach (Type t in new[] { typeof(HudSkin), typeof(VanillaBars), typeof(EditInputBlock),
                                            typeof(Hotbar), typeof(HotbarRow), typeof(IconHoverPatch),
