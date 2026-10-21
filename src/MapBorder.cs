@@ -23,7 +23,8 @@ namespace CarturUIHud
     /// same lever the hotbar panel uses. Chosen size is logged, so it can be argued with.
     ///
     /// Size and shape come from the map's own RawImage rect at runtime, not from a number written
-    /// here. Whatever shape the map is, the border is that shape - it does not decide for itself.
+    /// here. Whatever shape the map is, the border is that shape, grown outward by its own depth
+    /// so no part of it lies over the map (see Hang).
     ///
     /// Sibling order matters: the border goes directly after the map image, so it draws over the
     /// map and under every later sibling.
@@ -103,14 +104,17 @@ namespace CarturUIHud
             Log?.LogInfo(name + ": map " + size.x.ToString("0") + "x" + size.y.ToString("0")
                 + ", knot drawn at " + want.ToString("0.#") + " of " + knot.ToString("0.#") + " units");
 
-            // Exactly the map's rect: same anchors, same pivot, same size, so the rail lands on
-            // the map's own edge however the map is laid out or resized.
+            // The map's rect grown by the whole border on every side, so the frame sits round the
+            // map, not on it. Drawn on the map's edge, the knot covered the map's own corners - and
+            // the wind arrow is map/wind_marker, a 32x32 box at (-78,-78) from the centre of the
+            // 188-unit map, i.e. exactly the bottom-left corner (read from the scene with UnityPy).
+            // Pins inside the map near its edge were under the rail for the same reason.
             var rt = (RectTransform)img.transform;
             rt.anchorMin = maprt.anchorMin;
             rt.anchorMax = maprt.anchorMax;
             rt.pivot = maprt.pivot;
             rt.anchoredPosition = maprt.anchoredPosition;
-            rt.sizeDelta = maprt.sizeDelta;
+            rt.sizeDelta = maprt.sizeDelta + Vector2.one * (2f * want);
             rt.localScale = Vector3.one;
             rt.SetSiblingIndex(maprt.GetSiblingIndex() + 1);
         }
