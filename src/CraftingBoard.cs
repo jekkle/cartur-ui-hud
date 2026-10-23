@@ -247,14 +247,23 @@ namespace CarturUIHud
                 icon.enabled = false;
             // Search, category and craft-N (CraftingTools): the name keeps the first part of the bar, the
             // other two take the rest; the quantity buttons sit on the knotwork at the Craft plate's ends.
+            // MyLittleUI (shudnal) adds its own recipe filter, "MLUI_FilterField", beside RecipeList and
+            // anchored to the panel's bottom-left at the list's width (ILSpy, MyLittleUI 1.2.31,
+            // CraftFilter.InitFilterField). It is placed once, in InventoryGui.Awake, so on the board it
+            // lay across the recipe rows (derneuespieler, Discord 2026-10-21). It takes the search slot.
+            Transform mlui = craft.Find("MLUI_FilterField");
+            bool theirs = mlui != null && mlui.gameObject.activeSelf;
             Rect nameArea = left;
-            if (Full && CraftingTools.On)
+            if (Full && (CraftingTools.On || theirs))
             {
                 nameArea = Rect.MinMaxRect(left.xMin, left.yMin, left.xMin + left.width * 0.3f, left.yMax);
                 Rect cat = Rect.MinMaxRect(nameArea.xMax + pad, left.yMin + pad, nameArea.xMax + pad + left.width * 0.25f, left.yMax - pad);
                 Rect search = Rect.MinMaxRect(cat.xMax + pad, cat.yMin, left.xMax, cat.yMax);
-                CraftingTools.Lay(gui, craft, World(board, tex, search), World(board, tex, cat),
-                                  World(board, tex, Px(499, 1522, 545, 1605)), World(board, tex, Px(840, 1522, 886, 1605)));
+                if (CraftingTools.On)
+                    CraftingTools.Lay(gui, craft, World(board, tex, search), World(board, tex, cat),
+                                      World(board, tex, Px(499, 1522, 545, 1605)), World(board, tex, Px(840, 1522, 886, 1605)));
+                if (theirs)
+                    CraftingTools.Yield(mlui, World(board, tex, search));
             }
             Station(craft.Find("topic"), board, tex, nameArea);
             LayTabs(gui);

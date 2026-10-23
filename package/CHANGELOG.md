@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.9
+
+- **MyLittleUI's crafting filter has its own place.** Its Filter box sat on top of the recipe list on the crafting board. It now goes in the crafting title bar where the search box is, and Cartur's UI's own search steps aside so there is one box (MyLittleUI's also searches descriptions and materials). Without MyLittleUI, or with its filter off, nothing changes. Reported on Discord.
+
 ## 1.1.8
 
 - New icon in the Cartur's Mods style. The mod itself is unchanged from 1.1.7 (BepInEx still reports 1.1.7).

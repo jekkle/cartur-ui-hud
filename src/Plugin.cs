@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -46,7 +46,7 @@ namespace CarturUIHud
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
         public const string PluginName = "Carturs UI - HUD";
-        public const string PluginVersion = "1.1.7";
+        public const string PluginVersion = "1.1.9";
 
         private void Awake()
         {

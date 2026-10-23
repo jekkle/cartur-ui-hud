@@ -245,6 +245,24 @@ namespace CarturUIHud
             Set(s_qty);
         }
 
+        /// <summary>
+        /// Another mod's filter box takes the search slot, and ours steps aside so there is one box.
+        /// MyLittleUI's also matches descriptions and resources, which ours does not.
+        /// </summary>
+        internal static void Yield(Transform theirs, Rect search)
+        {
+            Seat(theirs, search);
+            if (s_field == null)
+                return;
+            if (s_query.Length > 0)
+            {
+                s_query = "";
+                s_field.SetTextWithoutNotify("");
+                Refilter();
+            }
+            s_field.gameObject.SetActive(false);
+        }
+
         private static void Seat(Transform t, Rect world)
         {
             var rt = (RectTransform)t;
