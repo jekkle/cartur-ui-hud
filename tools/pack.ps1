@@ -54,6 +54,8 @@ $shipped = Get-ChildItem (Join-Path $modDir "assets") -File -Recurse
 $mb = [math]::Round(($shipped | Measure-Object Length -Sum).Sum / 1MB, 1)
 Write-Host "assets: $($shipped.Count) files, $mb MB"
 
+& (Join-Path $root "..\_tools\prepack.ps1") -Pkg $pkg
+
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 $zip = Join-Path $dist "$($manifest.name)-$version.zip"
 if (Test-Path $zip) { Remove-Item $zip }

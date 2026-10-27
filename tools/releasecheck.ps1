@@ -81,6 +81,8 @@ foreach ($m in $module.GetMemberReferences()) {
     }
 }
 
+. (Join-Path $root "..\_tools\patchtargets.ps1")
+
 "checked against the installed game:"
 "  types    $types"
 "  methods  $methods"
