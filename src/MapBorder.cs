@@ -11,16 +11,11 @@ namespace CarturUIHud
     /// here reads or writes the map - no sprite swap, no colour, no tint. One Image is added
     /// beside it and that is all.
     ///
-    /// The piece is panel_frame: the frame Cartur drew, with nothing behind it. Not the panel
-    /// piece - that one has the fill composited under the frame, so as an overlay it would
-    /// cover the map's outer band. This one is transparent between the rule and the centre, so
-    /// the map shows through right up to the gold. Same frame as the panels either way, so the
-    /// map belongs to the same set.
+    /// Panel_thin has the fill inside its rule, so the centre patch is not drawn: the map shows
+    /// through right up to the rule, and the map belongs to the same set as the panels.
     ///
-    /// The knot is scaled to the map it sits on. It draws 40 units on a panel, which is most of
-    /// a minimap, so the corner is asked to be a tenth of the map's shorter side and clamped
-    /// between 16 units and the full 40 - the multiplier divides the drawn border, which is the
-    /// same lever the hotbar panel uses. Chosen size is logged, so it can be argued with.
+    /// The rule is panel_thin's: the same frame with the knots taken off, drawn with fillCenter off
+    /// so only the rule shows.
     ///
     /// Size and shape come from the map's own RawImage rect at runtime, not from a number written
     /// here. Whatever shape the map is, the border is that shape, grown outward by its own depth
@@ -71,7 +66,7 @@ namespace CarturUIHud
                 return;
 
             Canvas canvas = map.GetComponentInParent<Canvas>();
-            Sprite rail = AssetLoader.Piece("panel_frame", canvas != null ? canvas.referencePixelsPerUnit : 100f);
+            Sprite rail = AssetLoader.Piece("panel_thin", canvas != null ? canvas.referencePixelsPerUnit : 100f);
             if (rail == null)
                 return;
 
@@ -94,27 +89,20 @@ namespace CarturUIHud
             img.type = Image.Type.Sliced;
             img.fillCenter = false;
             img.color = Color.white;
+            img.pixelsPerUnitMultiplier = 1f;
 
-            Vector2 size = maprt.rect.size;
-            if (size.x <= 0f || size.y <= 0f)
-                size = maprt.sizeDelta;
-            float knot = AssetLoader.PieceBorderUnits("panel_frame");
-            float want = Mathf.Clamp(Mathf.Min(Mathf.Abs(size.x), Mathf.Abs(size.y)) * 0.10f, 16f, knot);
-            img.pixelsPerUnitMultiplier = want > 0f ? knot / want : 1f;
-            Log?.LogInfo(name + ": map " + size.x.ToString("0") + "x" + size.y.ToString("0")
-                + ", knot drawn at " + want.ToString("0.#") + " of " + knot.ToString("0.#") + " units");
-
-            // The map's rect grown by the whole border on every side, so the frame sits round the
-            // map, not on it. Drawn on the map's edge, the knot covered the map's own corners - and
-            // the wind arrow is map/wind_marker, a 32x32 box at (-78,-78) from the centre of the
-            // 188-unit map, i.e. exactly the bottom-left corner (read from the scene with UnityPy).
-            // Pins inside the map near its edge were under the rail for the same reason.
+            // Same anchors as the map, offsets pushed out by the rule's depth: the border follows
+            // the map's own rect at any resolution or canvas scale, stretched anchors included.
+            // Drawn on the map's edge the corners covered the map's own corners - the wind arrow is
+            // map/wind_marker, a 32x32 box in the bottom-left corner of the 188-unit map (read from
+            // the scene with UnityPy) - so the frame sits round the map, not on it.
+            float depth = AssetLoader.PieceBorderUnits("panel_thin");
             var rt = (RectTransform)img.transform;
             rt.anchorMin = maprt.anchorMin;
             rt.anchorMax = maprt.anchorMax;
             rt.pivot = maprt.pivot;
-            rt.anchoredPosition = maprt.anchoredPosition;
-            rt.sizeDelta = maprt.sizeDelta + Vector2.one * (2f * want);
+            rt.offsetMin = maprt.offsetMin - Vector2.one * depth;
+            rt.offsetMax = maprt.offsetMax + Vector2.one * depth;
             rt.localScale = Vector3.one;
             rt.SetSiblingIndex(maprt.GetSiblingIndex() + 1);
         }
