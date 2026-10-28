@@ -295,6 +295,31 @@ namespace CarturUIHud
             AccessTools.Method(s_raceController, "Refresh")?.Invoke(ctl, null);
         }
 
+        // Styles that VisEquipment carries no variant for (right hand, helmet, chest, legs - Cartur's
+        // Weapon Styles MeshSwap, and EpicLoot's VisEquipment patch) read the item off the wearer:
+        // vis.GetComponentInParent<Humanoid>().m_rightItem and so on. SetupVisEquipment only copies
+        // hashes, so on the copy those fields were null and every such style drew vanilla. The copy is
+        // handed the real player's worn ItemData (all eleven Humanoid ItemData fields, read from
+        // assembly_valheim.dll 2026-10-25) - read-only to it, its Player/Humanoid loops never run
+        // without a ZNetView. The attach hashes are reset so a style change on the same item, which
+        // leaves hash and variant alone, still re-attaches here. SetupVisEquipment is called only on
+        // equip changes (callers read from the DLL), so this is not per frame.
+        private static readonly FieldInfo[] s_worn = Array.FindAll(
+            typeof(Humanoid).GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly),
+            f => f.FieldType == typeof(ItemDrop.ItemData));
+        private static readonly FieldInfo[] s_hashes = Array.FindAll(
+            typeof(VisEquipment).GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic),
+            f => f.FieldType == typeof(int) && f.Name.StartsWith("m_current") && f.Name.EndsWith("ItemHash"));
+
+        private static void CopyWorn(Player real, Player copy, VisEquipment vis)
+        {
+            foreach (FieldInfo f in s_worn)
+                f.SetValue(copy, f.GetValue(real));
+            // Not 0: 0 is "nothing worn", and an emptied slot would then compare equal and keep its item.
+            foreach (FieldInfo f in s_hashes)
+                f.SetValue(vis, int.MinValue);
+        }
+
         private float VisH => (_hi - _lo) * Fit / _zoom;
 
         private void LateUpdate()
@@ -306,6 +331,7 @@ namespace CarturUIHud
             if (CharacterPreview.Dirty && Player.m_localPlayer != null)
             {
                 CharacterPreview.Dirty = false;
+                CopyWorn(Player.m_localPlayer, _pv, _vis);
                 s_setup?.Invoke(Player.m_localPlayer, new object[] { _vis, false });
                 CopyRace(Player.m_localPlayer, _pv);
             }

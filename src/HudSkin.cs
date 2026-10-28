@@ -187,6 +187,16 @@ namespace CarturUIHud
         /// </summary>
         internal static bool SlotDetail = true;
 
+        /// <summary>
+        /// Layout/vanillaFoodTimers. Our diamonds show a food only while it sits in, or was eaten
+        /// from, their own quick slot, so a food eaten from the hotbar, the bag or a feast shows
+        /// no timer at all - vanilla's Hud.UpdateFood lists every food in eating order. On, the
+        /// diamonds keep their skin and vanilla's UpdateFood drives them. Read when the diamonds
+        /// are built, so a change takes effect on the next launch. Nothing here ever wrote
+        /// Player.m_foods; this is only about what the HUD shows of it.
+        /// </summary>
+        internal static bool VanillaFoodTimers;
+
         internal static BepInEx.Logging.ManualLogSource Log;
 
         [HarmonyPatch(typeof(Hud), "Awake")]
@@ -430,6 +440,9 @@ namespace CarturUIHud
                 }
             }
 
+            if (VanillaFoodTimers)
+                return;
+
             // Blanking these makes vanilla UpdateFood a no-op loop so it stops writing the food
             // icons every frame. The boxes are ours from here.
             hud.m_foodIcons = Array.Empty<Image>();
@@ -616,7 +629,7 @@ namespace CarturUIHud
             // Skin bails out without building these if the HUD it expects is not there, and
             // this runs every frame regardless - so without the guard a missing hudroot is a
             // null reference per frame rather than one warning at load.
-            if (s_foodFrames == null || s_foodTimes == null)
+            if (VanillaFoodTimers || s_foodFrames == null || s_foodTimes == null)
                 return;
 
             List<Player.Food> foods = player.GetFoods();

@@ -164,18 +164,21 @@ namespace CarturUIHud
         private static void ReloadFromConfig()
         {
             foreach (Element e in s_elements)
-            {
-                if (!TryParse(e.Entry.Value, out Vector2 position, out float scale, out float length,
-                        out float frameScale, out Vector2 frameOffset))
-                    continue;
-                SetPos(e, position);
-                e.Scale = Mathf.Clamp(scale, MinScale, MaxScale);
-                e.Length = Mathf.Clamp(length, MinScale, MaxScale);
-                e.FrameScale = Mathf.Clamp(frameScale, MinScale, MaxScale);
-                e.FrameOffset = frameOffset;
-                Apply(e);
-            }
+                ApplyEntry(e);
             Log.LogInfo("config reloaded from disk");
+        }
+
+        private static void ApplyEntry(Element e)
+        {
+            if (!TryParse(e.Entry.Value, out Vector2 position, out float scale, out float length,
+                    out float frameScale, out Vector2 frameOffset))
+                return;
+            SetPos(e, position);
+            e.Scale = Mathf.Clamp(scale, MinScale, MaxScale);
+            e.Length = Mathf.Clamp(length, MinScale, MaxScale);
+            e.FrameScale = Mathf.Clamp(frameScale, MinScale, MaxScale);
+            e.FrameOffset = frameOffset;
+            Apply(e);
         }
 
         /// <summary>
@@ -300,6 +303,18 @@ namespace CarturUIHud
                 element.Pin.Rest = rest;
             SetPos(element, position);
             Apply(element);
+
+            // A layout value typed into Configuration Manager changed the entry and nothing else:
+            // SaveOnConfigSet is off, so no file write happened and the file watcher never fired,
+            // and the piece only moved after a restart. SettingChanged is the one signal a typed
+            // value does raise. Edit mode's own Save() raises it too, so a value that already
+            // matches what is on screen is skipped - re-reading it would feed the 2-3 decimal
+            // rounding of Format back into the live scale.
+            element.Entry.SettingChanged += (sender, args) =>
+            {
+                if (s_elements.Contains(element) && element.Entry.Value != Format(Pos(element), element.Scale, element.Length, element.FrameScale, element.FrameOffset))
+                    ApplyEntry(element);
+            };
 
             s_elements.Add(element);
 
@@ -600,6 +615,7 @@ namespace CarturUIHud
             private bool m_resizing;
             private float m_resizeFrom;
             private float m_resizeScale;
+            private Vector2 m_resizeCentre;
 
             public void Init(Element element) => m_element = element;
 
@@ -611,7 +627,7 @@ namespace CarturUIHud
                 m_frameDrag = Ctrl() && m_element.OnFrame != null;
                 float reach = 0f;
                 m_resizing = !m_frameDrag
-                    && OnBorder(m_element, eventData.pressPosition, eventData.pressEventCamera, out reach);
+                    && OnBorder(m_element, eventData.pressPosition, eventData.pressEventCamera, out reach, out m_resizeCentre);
                 if (m_resizing)
                 {
                     // Scale is driven by how much further the cursor gets from the middle than it
@@ -633,7 +649,8 @@ namespace CarturUIHud
 
                 if (m_resizing)
                 {
-                    if (OnReach(m_element, eventData.position, eventData.pressEventCamera, out float reach) && reach > 1f)
+                    float reach = Reach(m_element, eventData.position, eventData.pressEventCamera, m_resizeCentre);
+                    if (reach > 1f)
                     {
                         m_element.Scale = Mathf.Clamp(m_resizeScale * (reach / m_resizeFrom), MinScale, MaxScale);
                         Apply(m_element);
@@ -706,9 +723,10 @@ namespace CarturUIHud
         /// the bars' width every frame and anything written to sizeDelta is gone next frame. So
         /// this cannot stretch one axis on its own, and no edge pretends to.
         /// </summary>
-        private static bool OnBorder(Element e, Vector2 screen, Camera cam, out float reach)
+        private static bool OnBorder(Element e, Vector2 screen, Camera cam, out float reach, out Vector2 centre)
         {
             reach = 0f;
+            centre = Vector2.zero;
             var box = e.Overlay != null ? (RectTransform)e.Overlay.transform : e.Hit;
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(box, screen, cam, out Vector2 local))
                 return false;
@@ -724,43 +742,48 @@ namespace CarturUIHud
             // to be measured here per axis - dx alone for a side edge, dy alone for a top or
             // bottom one - while the drag used the full diagonal, so the number jumped the
             // instant the button went down and the piece resized before the mouse had moved.
-            reach = Reach(e, screen, cam);
+            centre = Centre(e);
+            reach = Reach(e, screen, cam, centre);
 
             // A grab right on the middle has nothing to measure against and would divide by it.
             return reach > 1f;
         }
 
         /// <summary>
-        /// Distance from the piece's middle to the cursor, in the PARENT's units.
+        /// Distance from a fixed centre to the cursor, in the units of Move's parent.
         ///
-        /// The parent, not the piece itself, and that is the whole of it. A piece is resized by
-        /// localScale, and its own local space lives inside that scale - so the same screen
-        /// point maps to a smaller local number as the piece grows. Measuring there and then
-        /// setting the scale from what came back closed a loop:
+        /// Not Hit's parent, and not the centre as it is now. A piece is resized by localScale
+        /// (or by a bar's own height), and any space inside Move scales with it - so the same
+        /// screen point maps to a smaller local number as the piece grows. Measuring there and
+        /// then setting the scale from what came back closed a loop:
         ///
         ///     reach ~ D / scale,  scale = startScale * reach / startReach
         ///
-        /// which inverts the scale every frame. On screen that was a piece jumping between tiny
-        /// and huge on a pixel of mouse movement, which is what Cartur reported. The parent's
-        /// space does not move when the child scales, so reach is proportional to the distance
-        /// the hand actually travelled and the size follows it straight.
+        /// which inverts the scale every frame, a piece jumping between tiny and huge on a
+        /// pixel of mouse movement. An earlier fix measured in Hit's parent, but Hit is often a
+        /// DESCENDANT of Move (the inventory panels' Bkg, every bar's frame), so that parent was
+        /// still inside the scaled space and the loop survived for those pieces. Move's parent
+        /// does not scale with Move. The centre is read once when the drag starts: re-reading it
+        /// each frame moves it whenever the pivot is not the middle, and the periodic outline
+        /// refit moved it again, so the ratio drifted under a still hand.
         /// </summary>
-        private static float Reach(Element e, Vector2 screen, Camera cam)
+        private static Vector2 Centre(Element e)
         {
-            var parent = e.Hit.parent as RectTransform;
+            var parent = e.Move.parent as RectTransform;
+            var box = e.Overlay != null ? (RectTransform)e.Overlay.transform : e.Hit;
+            if (parent == null)
+                return Vector2.zero;
+            return parent.InverseTransformPoint(box.TransformPoint(box.rect.center));
+        }
+
+        private static float Reach(Element e, Vector2 screen, Camera cam, Vector2 centre)
+        {
+            var parent = e.Move.parent as RectTransform;
             if (parent == null)
                 return 0f;
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen, cam, out Vector2 local))
                 return 0f;
-            var box = e.Overlay != null ? (RectTransform)e.Overlay.transform : e.Hit;
-            Vector3 centre = parent.InverseTransformPoint(box.TransformPoint(box.rect.center));
-            return (local - (Vector2)centre).magnitude;
-        }
-
-        private static bool OnReach(Element e, Vector2 screen, Camera cam, out float reach)
-        {
-            reach = Reach(e, screen, cam);
-            return reach > 0f;
+            return (local - centre).magnitude;
         }
 
         private static Vector2 ToLocal(RectTransform rt, Vector2 screen, Camera cam)

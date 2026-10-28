@@ -46,7 +46,7 @@ namespace CarturUIHud
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
         public const string PluginName = "Carturs UI - HUD";
-        public const string PluginVersion = "1.1.9";
+        public const string PluginVersion = "1.1.10";
 
         private void Awake()
         {
@@ -121,6 +121,13 @@ namespace CarturUIHud
                     "On the food diamonds: the Eat/countdown text sits on the bottom bevel beside "
                     + "where the key sits on the top one. Off puts the countdown back above the "
                     + "bottom corner.").Value;
+
+                HudSkin.VanillaFoodTimers = Config.Bind(
+                    "Layout", "vanillaFoodTimers", false,
+                    "Off: each food diamond shows the food in, or eaten from, its own quick slot. "
+                    + "On: the diamonds show the food timers the way the base game lists them, in the "
+                    + "order the foods were eaten, whatever they were eaten from. Takes effect on "
+                    + "the next launch.").Value;
 
                 ConfigEntry<bool> editMode = Config.Bind(
                     "Layout", "editMode", false,
