@@ -3,6 +3,7 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace CarturUIHud
 {
@@ -20,12 +21,29 @@ namespace CarturUIHud
     internal static class TextScale
     {
         internal static ConfigEntry<float> Scale;
+        internal static ConfigEntry<float> UiScale;
 
         internal static void Init(ConfigFile config)
         {
             Scale = config.Bind("Panels", "textScale", 1f,
                 new ConfigDescription("Size of the text in the inventory, crafting, chest and trader windows. 1 is the normal size; raise it on a big monitor. Applies straight away.",
                     new AcceptableValueRange<float>(0.8f, 1.6f)));
+            UiScale = config.Bind("Panels", "uiScale", 1f,
+                new ConfigDescription("Size of the whole interface - windows, icons and text - 1 to 1.25. Applies straight away. Above 1 the canvas is smaller, so the inventory, crafting and equipment panels sit closer together; arrange them in edit mode if they touch.",
+                    new AcceptableValueRange<float>(1f, 1.25f)));
+        }
+
+        // The HUD, inventory, store, map and menu canvases each carry a GuiScaler beside their
+        // CanvasScaler (read off the prefabs; only the cursor and the world-space canvases lack one), and GuiScaler.UpdateScale writes scaleFactor from the
+        // screen size and the saved Settings > Accessibility > GUI scale (50-115%) every frame. The
+        // vanilla slider tops out at 115%, so this multiplies what it just wrote. CanvasScaler.scaleFactor
+        // is a plain setter that Handle() reads next Update, so writing it twice a frame costs nothing.
+        [HarmonyPatch(typeof(GuiScaler), "UpdateScale")]
+        [HarmonyPostfix]
+        private static void Ui(CanvasScaler ___m_canvasScaler)
+        {
+            if (UiScale != null && UiScale.Value > 1f && ___m_canvasScaler != null)
+                ___m_canvasScaler.scaleFactor *= UiScale.Value;
         }
 
         [HarmonyPatch(typeof(InventoryGui), "Awake")]

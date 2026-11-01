@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (1.1.11)
+
+- **New option, Panels > uiScale (1 to 1.25).** Scales the whole interface - windows, icons and text - not just the text. Applies straight away. It stacks on the game's own GUI scale, so the panels sit closer together as it grows; arrange them in edit mode if they touch. Asked for on Hexium.
+
 ## 1.1.10
 
 - **The map and minimap borders have no corner knots and fit their map.** The border is now the plain frame rule with mitred corners, and it follows each map's own size, so it hugs the large map and the minimap at any resolution and UI scale.

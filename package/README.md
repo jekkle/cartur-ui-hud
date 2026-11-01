@@ -73,6 +73,7 @@ Config file: `BepInEx/config/com.jekkle.valheim.carturuihud.cfg`.
 | --- | --- | --- |
 | `Panels / newPanels` | true | Off: HUD, slots, inventory, hotbar and equipment panel only. Restart. |
 | `Panels / textScale` | 1 | Text size in the inventory, crafting, chest and trader windows, 0.8 to 1.6. Applies straight away. |
+| `Panels / uiScale` | 1 | Size of the whole interface, windows and icons as well as text, 1 to 1.25. Applies straight away. On top of the game's own GUI scale (Settings > Accessibility, up to 115%). The panels sit closer together as it grows; move them in edit mode if they touch. |
 | `Panels / craftingTools` | true | Search, category and craft-several on the crafting board. Restart. |
 | `Inventory / extraSlots` | true | The equipment panel, quick slots and shield slot. Off leaves the inventory size and slots to the game or another inventory mod. Anything still in those slots moves into your bag, and the bag grows if it is full. Restart. |
 | `Layout / editMode` | false | Arrange the pieces, see above. |
