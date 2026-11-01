@@ -376,16 +376,20 @@ namespace CarturUIHud
         // clicks and show no tooltips. Nothing in the code read so far puts a raycast graphic over
         // those cells, so this asks the EventSystem instead: for the cells at the left and right of
         // the first, third-last and last bag row it logs the rects involved and every object the
-        // pointer would hit there, nearest first. Armed by dumpOnce at launch (the dump itself
-        // switches the flag off); open a chest and wait. At most three lines per launch.
+        // pointer would hit there, nearest first. Armed whenever dumpOnce is seen true here (at launch,
+        // or set live just before opening a chest - the dump switches the flag off again a few frames
+        // after the inventory opens, so it is latched); open a chest and wait. At most three lines per launch.
         private static int s_rayFrames, s_rayLogs;
+        private static bool s_rayArmed;
         private static readonly System.Reflection.FieldInfo s_rayElements = AccessTools.Field(typeof(InventoryGrid), "m_elements");
 
         [HarmonyPatch(typeof(InventoryGui), "UpdateContainer")]
         [HarmonyPostfix]
         private static void ContainerRays(InventoryGui __instance)
         {
-            if (!s_barsArmed || s_rayLogs >= 3 || EventSystem.current == null)
+            if (Enabled.Value)
+                s_rayArmed = true;
+            if (!s_rayArmed || s_rayLogs >= 3 || EventSystem.current == null)
                 return;
             if (__instance.m_container == null || !__instance.m_container.gameObject.activeInHierarchy)
             {
