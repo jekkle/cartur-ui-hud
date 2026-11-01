@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using System.Text;
 using BepInEx.Configuration;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace CarturUIHud
@@ -368,6 +370,70 @@ namespace CarturUIHud
                     + " ppu=" + (scaler != null ? scaler.referencePixelsPerUnit.ToString() : "n/a")
                     + " refRes=" + (scaler != null ? scaler.referenceResolution.ToString() : "n/a"));
             }
+        }
+
+        // Hexium thread 457 (Zenebatos, 1.1.9): with a container open, the last two bag rows take no
+        // clicks and show no tooltips. Nothing in the code read so far puts a raycast graphic over
+        // those cells, so this asks the EventSystem instead: for the cells at the left and right of
+        // the first, third-last and last bag row it logs the rects involved and every object the
+        // pointer would hit there, nearest first. Armed by dumpOnce at launch (the dump itself
+        // switches the flag off); open a chest and wait. At most three lines per launch.
+        private static int s_rayFrames, s_rayLogs;
+        private static readonly System.Reflection.FieldInfo s_rayElements = AccessTools.Field(typeof(InventoryGrid), "m_elements");
+
+        [HarmonyPatch(typeof(InventoryGui), "UpdateContainer")]
+        [HarmonyPostfix]
+        private static void ContainerRays(InventoryGui __instance)
+        {
+            if (!s_barsArmed || s_rayLogs >= 3 || EventSystem.current == null)
+                return;
+            if (__instance.m_container == null || !__instance.m_container.gameObject.activeInHierarchy)
+            {
+                s_rayFrames = 0;
+                return;
+            }
+            if (++s_rayFrames != 20)
+                return;
+            s_rayLogs++;
+
+            var elements = s_rayElements.GetValue(__instance.m_playerGrid) as List<InventoryElement>;
+            Canvas canvas = __instance.GetComponentInParent<Canvas>();
+            Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            int w = Slots.Width, rows = Slots.VisibleRows;
+            var sb = new StringBuilder("[rays] container open: visibleRows=" + rows + " inventoryHeight="
+                + Slots.PlayerInventory?.GetHeight() + " player=" + Box(__instance.m_player)
+                + " container=" + Box(__instance.m_container)
+                + " bagBoard=" + Box(__instance.m_playerGrid.m_gridRoot.Find(InventoryBoard.Name) as RectTransform));
+            foreach (int row in new[] { 1, rows - 3, rows - 2, rows - 1 })
+            {
+                if (row < 1 || row >= rows)
+                    continue;
+                foreach (int col in new[] { 0, w - 1 })
+                {
+                    int i = row * w + col;
+                    var cell = elements != null && i < elements.Count ? elements[i]?.transform as RectTransform : null;
+                    if (cell == null)
+                        continue;
+                    Vector2 screen = RectTransformUtility.WorldToScreenPoint(cam, cell.TransformPoint(cell.rect.center));
+                    var hits = new List<RaycastResult>();
+                    EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = screen }, hits);
+                    sb.Append("\n  row " + row + " col " + col + " at " + screen + " cell=" + FullPath(cell) + ":");
+                    for (int h = 0; h < hits.Count && h < 6; h++)
+                        sb.Append("\n    " + h + " " + FullPath(hits[h].gameObject.transform) + " [sort " + hits[h].sortingOrder
+                            + " depth " + hits[h].depth + "]");
+                }
+            }
+            Log.LogInfo(sb.ToString());
+        }
+
+        private static string Box(RectTransform rt)
+        {
+            if (rt == null)
+                return "null";
+            var c = new Vector3[4];
+            rt.GetWorldCorners(c);
+            return "world(" + c[0].x.ToString("0") + "," + c[0].y.ToString("0") + " .. " + c[2].x.ToString("0") + ","
+                + c[2].y.ToString("0") + ") scale " + rt.lossyScale.x.ToString("0.###");
         }
 
         private static string FullPath(Transform t)
