@@ -46,7 +46,7 @@ namespace CarturUIHud
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
         public const string PluginName = "Carturs UI - HUD";
-        public const string PluginVersion = "1.1.10";
+        public const string PluginVersion = "1.1.11";
 
         private void Awake()
         {

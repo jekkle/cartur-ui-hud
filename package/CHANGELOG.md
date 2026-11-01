@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased (1.1.11)
+## 1.1.11
 
-- **New option, Panels > uiScale (1 to 1.25).** Scales the whole interface - windows, icons and text - not just the text. Applies straight away. It stacks on the game's own GUI scale, so the panels sit closer together as it grows; arrange them in edit mode if they touch. Asked for on Hexium.
+- **New option, Panels > uiScale (1 to 1.25, default 1).** Scales the whole interface - windows, icons and text - not just the text. Applies straight away. It stacks on the game's own GUI scale, so the panels sit closer together as it grows; arrange them in edit mode if they touch. Asked for on Hexium.
+- Tested: uiScale 1.25 at 1920x1080 in game, on a Debug build. The canvas scale went from 1.0 to 1.25, no panel went off screen or overlapped, and 12 of 12 bag-cell hit tests passed. Not tested: the Release build in game, other resolutions, uiScale together with the game's own GUI scale above 100%, gamepad, multiplayer.
 
 ## 1.1.10
 
