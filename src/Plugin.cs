@@ -42,11 +42,13 @@ namespace CarturUIHud
     // Races' visual controller by name.
     [BepInDependency("com.maxsch.valheim.vnei", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("Azathoth.LinejaeserasRace", BepInDependency.DependencyFlags.SoftDependency)]
+    // Soft, load order only: PovCompat registers with Path of Valheiman's storage API in Awake.
+    [BepInDependency(PovCompat.Guid, BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
         public const string PluginName = "Carturs UI - HUD";
-        public const string PluginVersion = "1.1.10";
+        public const string PluginVersion = "1.1.12";
 
         private void Awake()
         {
@@ -259,6 +261,7 @@ namespace CarturUIHud
                     // stands down, and points its quiver row at our slots.
                     QuiverCompat.Init();
                 });
+                Guard("PovCompat", () => { PovCompat.Log = Logger; PovCompat.Init(); });
                 Guard("QssCompat", () => QssCompat.Init(harmony));
                 // BaseRowsPatch is nested inside QuiverCompat, and PatchAll(Type) reads
                 // AccessTools.GetDeclaredMethods on the type it is given - checked in the shipped

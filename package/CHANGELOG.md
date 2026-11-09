@@ -1,8 +1,14 @@
 # Changelog
 
-## Unreleased (1.1.11)
+## 1.1.12
 
-- **New option, Panels > uiScale (1 to 1.25).** Scales the whole interface - windows, icons and text - not just the text. Applies straight away. It stacks on the game's own GUI scale, so the panels sit closer together as it grows; arrange them in edit mode if they touch. Asked for on Hexium.
+- **Path of Valheiman:** with both installed, Path of Valheiman's own equipment sheet and its category crafting window no longer draw over Cartur's UI. They overlapped the Equipment panel, replaced the recipe list, moved the Requirements box and put a second "< 1 >" amount control on the Craft button. Cartur's UI turns both off through Path of Valheiman's own settings, set again on every launch. Cartur's UI does not write that setting to Path of Valheiman's config file, but Path of Valheiman may save it the next time one of its own settings is changed (its "Crafting list by category" setting then shows as off).
+- Tested in the game (Valheim 1.0.20, 1280x720, Path of Valheiman 5.1.2): with both installed the log says Path of Valheiman's equipment system was turned off by Cartur's UI, and the inventory screen shows only Cartur's Equipment panel; without Path of Valheiman the mod loads with no error about it. Not tested: the crafting-window part (it was read from Path of Valheiman's code and the screenshots, and the game was not run with it), Path of Valheiman's food, tool and arrow hotkeys and its tool bar with its equipment off, the build with the last small changes, other resolutions, multiplayer.
+
+## 1.1.11
+
+- **New option, Panels > uiScale (1 to 1.25, default 1).** Scales the whole interface - windows, icons and text - not just the text. Applies straight away. It stacks on the game's own GUI scale, so the panels sit closer together as it grows; arrange them in edit mode if they touch. Asked for on Hexium.
+- Tested: uiScale 1.25 at 1920x1080 in game, on a Debug build. The canvas scale went from 1.0 to 1.25, no panel went off screen or overlapped, and 12 of 12 bag-cell hit tests passed. Not tested: the Release build in game, other resolutions, uiScale together with the game's own GUI scale above 100%, gamepad, multiplayer.
 
 ## 1.1.10
 

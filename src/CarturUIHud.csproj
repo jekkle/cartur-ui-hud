@@ -9,6 +9,10 @@
     <RestoreAdditionalProjectSources>https://nuget.bepinex.dev/v3/index.json</RestoreAdditionalProjectSources>
     <VALHEIM_INSTALL Condition="'$(VALHEIM_INSTALL)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Valheim</VALHEIM_INSTALL>
     <R2MODMAN_PROFILE Condition="'$(R2MODMAN_PROFILE)' == ''">$(APPDATA)\r2modmanPlus-local\Valheim\profiles\Default</R2MODMAN_PROFILE>
+    <!-- Path of Valheiman's DLL, compile-time only (PovCompat implements its IStorageProvider). Never shipped. -->
+    <!-- PoV targets net48; Unity's Mono loads both, so MSBuild's framework check is skipped (MSB3274). -->
+    <ResolveAssemblyReferenceIgnoreTargetFrameworkAttributeVersionMismatch>true</ResolveAssemblyReferenceIgnoreTargetFrameworkAttributeVersionMismatch>
+    <POV_DLL Condition="'$(POV_DLL)' == ''">$(APPDATA)\r2modmanPlus-local\Valheim\profiles\PovTest\BepInEx\plugins\treextr-PathOfValheiman\PathOfValheiman.dll</POV_DLL>
   </PropertyGroup>
 
   <!-- Dump, Probe and IconRender exist to answer "where did the game move this control" -
@@ -43,6 +47,10 @@
   <ItemGroup>
     <Reference Include="SoftReferenceableAssets">
       <HintPath>$(VALHEIM_INSTALL)\valheim_Data\Managed\SoftReferenceableAssets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="PathOfValheiman">
+      <HintPath>$(POV_DLL)</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="assembly_valheim">

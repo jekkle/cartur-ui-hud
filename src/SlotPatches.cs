@@ -545,6 +545,7 @@ namespace CarturUIHud
             // raised its own event for this; when that went, so did the only refresh, and the
             // diamonds held whatever was in the slots at login for the rest of the session.
             HudSkin.RefreshQuickSlots();
+            PovCompat.Changed();
         }
 
         [HarmonyPatch(typeof(Humanoid), "SetupEquipment")]

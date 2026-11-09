@@ -38,7 +38,8 @@ namespace CarturUIHud
     /// </summary>
     internal static class Slots
     {
-        internal enum Kind { Equipment, Shield, Quick, Quiver }
+        // Pov: a Path of Valheiman cell kept for it (PovCompat); Id is PoV's cell id.
+        internal enum Kind { Equipment, Shield, Quick, Quiver, Pov }
 
         internal sealed class Slot
         {
@@ -92,6 +93,9 @@ namespace CarturUIHud
             {
                 if (item?.m_shared == null || !IsActive)
                     return false;
+                // PoV decides what its cells take and whether they are open (a belt opens food cells).
+                if (Kind == Kind.Pov)
+                    return PovCompat.Accepts(Id, item);
                 return Kind == Kind.Quick ? IsFood(item) : item.m_shared.m_itemType == Type;
             }
 
@@ -103,6 +107,11 @@ namespace CarturUIHud
             /// </summary>
             internal bool Keeps(ItemDrop.ItemData item)
             {
+                // A PoV cell keeps anything of its kind, open or not: on load PoV reports its cells
+                // closed for a moment, and asking IsOpen here emptied every one into the bag
+                // (pilot 2026-10-25). Open only gates putting things in.
+                if (Kind == Kind.Pov)
+                    return item?.m_shared != null && PovCompat.Fits(Id, item);
                 if (!Accepts(item))
                     return false;
                 if (Kind != Kind.Equipment)
@@ -118,8 +127,10 @@ namespace CarturUIHud
         // inventory is whatever size the game or another inventory mod makes it. Everything below
         // that asks "is this cell a slot" then answers no, and VisibleRows is the real height.
         internal static bool Enabled = true;
-        internal static int HiddenRows => Enabled ? 3 : 0;
-        internal const int SlotCount = 24;
+        // Path of Valheiman's cells follow in rows of their own, after index 24 (PovCompat).
+        internal static int HiddenRows => Enabled ? 3 + PovCompat.Rows : 0;
+        internal const int BaseSlotCount = 24;
+        internal static int SlotCount => All.Length;
 
         /// <summary>
         /// Cells in the hidden region. SlotCount is the size of the slot table - 24, being
@@ -133,7 +144,7 @@ namespace CarturUIHud
 
         private static Slot[] BuildTable()
         {
-            var table = new Slot[SlotCount];
+            var table = new Slot[BaseSlotCount + PovCompat.Rows * 8];
 
             // Indices read off EquipmentAndQuickSlots.Slots.InitializeSlots. The quick slots
             // carry no item type: Accepts does not consult it for them.
@@ -154,6 +165,10 @@ namespace CarturUIHud
             for (int i = 0; i < 3; i++)
                 table[QuiverCompat.FirstSlot + i] = new Slot("Quiver" + (i + 1),
                     QuiverCompat.FirstSlot + i, "Ammo", Kind.Quiver, ItemDrop.ItemData.ItemType.Ammo);
+
+            for (int i = 0; i < PovCompat.Cells.Length; i++)
+                table[BaseSlotCount + i] = new Slot(PovCompat.Cells[i], BaseSlotCount + i, PovCompat.Cells[i],
+                    Kind.Pov, ItemDrop.ItemData.ItemType.None);
             return table;
         }
 
