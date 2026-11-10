@@ -48,7 +48,7 @@ namespace CarturUIHud
     {
         public const string PluginGuid = "com.jekkle.valheim.carturuihud";
         public const string PluginName = "Carturs UI - HUD";
-        public const string PluginVersion = "1.1.12";
+        public const string PluginVersion = "1.1.13";
 
         private void Awake()
         {
@@ -206,7 +206,7 @@ namespace CarturUIHud
                 foreach (Type t in new[] { typeof(HudSkin), typeof(VanillaBars), typeof(EditInputBlock),
                                            typeof(Hotbar), typeof(HotbarRow), typeof(IconHoverPatch),
                                            typeof(InventoryScreen), typeof(CookTimer), typeof(StyleTab),
-                                           typeof(TextScale) })
+                                           typeof(TextScale), typeof(GamepadFrame) })
                     Guard(t.Name, () => harmony.PatchAll(t));
                 if (panels)
                 {

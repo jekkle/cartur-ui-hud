@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.13
+
+- **Controller: the yellow frames sit where they should.** With a controller in use, the game draws a yellow frame round the inventory and round the armour and weight boxes. Those frames are sized for the game's own layout, so with Cartur's UI they hung under the inventory and beside the side column. They now follow Cartur's inventory board and the armour and weight boxes.
+- Tested in the game (Valheim 1.0.20, 1280x720, Release build): with the game made to report a controller (no real controller), the frame round the inventory went from 297x169 px, hanging below the board, to 313x143, matching the board, and the other two frames moved onto the side column; the same with a chest open. Not tested: a real controller, the chest's own frame while the chest has focus, other resolutions.
+
 ## 1.1.12
 
 - **Path of Valheiman:** with both installed, Path of Valheiman's own equipment sheet and its category crafting window no longer draw over Cartur's UI. They overlapped the Equipment panel, replaced the recipe list, moved the Requirements box and put a second "< 1 >" amount control on the Craft button. Cartur's UI turns both off through Path of Valheiman's own settings, set again on every launch. Cartur's UI does not write that setting to Path of Valheiman's config file, but Path of Valheiman may save it the next time one of its own settings is changed (its "Crafting list by category" setting then shows as off).
