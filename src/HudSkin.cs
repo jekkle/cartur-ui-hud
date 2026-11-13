@@ -814,11 +814,15 @@ namespace CarturUIHud
             if (adrenaline > 0f)
                 Bars[3].Drive(adrenaline, adrenaline);
             else if (edit)
-                Bars[3].Drive(AdrenalineFull, AdrenalineFull);   // full length to place it against
+                Bars[3].Drive(0f, AdrenalineFull);   // an empty bar at full length to place it against, "0" on it, with or without a trinket
 
             Bars[2].Show(maxEitr > 0f || edit);
             if (maxEitr > 0f)
                 Bars[2].Drive(player.GetEitr(), maxEitr);
+            else if (edit)
+                // Shown to be placed, but never driven: the prefab's own text "45" stayed on it, a second bar
+                // that looked like the adrenaline bar's old spot after a move (Reecem02, 2026-11-11).
+                Bars[2].Drive(EitrFull, EitrFull);
 
             if (edit && __instance.m_gpRoot != null && !__instance.m_gpRoot.gameObject.activeSelf)
                 __instance.m_gpRoot.gameObject.SetActive(true);

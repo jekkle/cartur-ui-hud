@@ -70,6 +70,8 @@ namespace CarturUIHud
         private static void Awake(Player __instance)
         {
             __instance.GetInventory()?.SetHeight(Slots.FullHeight);
+            Slots.InitKeys();
+            PouchItems.Reset();
         }
 
         /// <summary>
@@ -611,6 +613,9 @@ namespace CarturUIHud
             {
                 if (!Slots.IsWorn(item))
                     continue;
+                // A belt worn from the key pouch stays in the pouch; pulling it into the Utility slot would empty the pouch.
+                if (Slots.At(item.m_gridPos)?.Kind == Slots.Kind.Pouch)
+                    continue;
                 Slots.Slot home = Slots.HomeSlot(item);
                 if (home == null || item.m_gridPos == home.GridPos)
                     continue;
@@ -629,6 +634,8 @@ namespace CarturUIHud
                     moved = true;
                 }
             }
+
+            PouchItems.Sync(player);
 
             if (moved)
                 Changed(inv);

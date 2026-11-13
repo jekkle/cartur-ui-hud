@@ -54,12 +54,12 @@ namespace CarturUIHud
             return s_selected?.GetValue(gui.m_playerGrid) is Vector2i pos ? Slots.At(pos) : null;
         }
 
-        private const int Columns = 3;   // the quick slots and the quiver are both three wide
+        private const int Columns = 8;   // the pouch row is up to eight wide; the quick slots and the quiver are three
         // Four equipment rows, the quick strip, and the quiver strip: rows 0..5, so the bound
         // is 6. It was 5 when this was written, before the quiver row existed, which put
         // EquipmentPanel.QuiverRow exactly one past the end and made the quiver unreachable
         // with a pad. Derived from the panel's own constant now rather than counted again here.
-        private const int Rows = EquipmentPanel.QuiverRow + 1;
+        private const int Rows = EquipmentPanel.KeyRow + 1;
 
         [HarmonyPatch(typeof(InventoryGrid), "UpdateGamepad")]
         [HarmonyPrefix]
@@ -84,6 +84,12 @@ namespace CarturUIHud
             if (dx == 0 && dy == 0)
                 return true;
 
+            return Navigate(__instance, pos, dx, dy);
+        }
+
+        /// <summary>The movement rules, apart from reading the buttons, so the test pilot can drive them.</summary>
+        internal static bool Navigate(InventoryGrid __instance, Vector2i pos, int dx, int dy)
+        {
             Slots.Slot current = Slots.At(pos);
 
             if (current == null)
@@ -117,8 +123,19 @@ namespace CarturUIHud
                 // "left from column 0": the art's columns are ragged - Head and Chest sit in
                 // the middle with nothing beside them - so a fixed column test would trap the
                 // selection on them.
-                if (!Step(__instance, column, row, dx, dy) && dx < 0)
-                    Move(__instance, new Vector2i(Slots.Width - 1, Mathf.Clamp(row, 0, Slots.VisibleRows - 1)));
+                if (!Step(__instance, column, row, dx, dy))
+                {
+                    if (dx < 0)
+                        Move(__instance, new Vector2i(Slots.Width - 1, Mathf.Clamp(row, 0, Slots.VisibleRows - 1)));
+                    // Down off the last panel row opens the key pouch and lands on its first cell. There is no
+                    // pad button for the Keys button, and every pad button the inventory uses is taken.
+                    else if (dy > 0 && EquipmentPanel.OpenKeys())
+                    {
+                        Slots.Slot firstKey = EquipmentPanel.SlotAtCell(0, EquipmentPanel.KeyRow);
+                        if (firstKey != null)
+                            Move(__instance, firstKey.GridPos);
+                    }
+                }
             }
             return false;
         }

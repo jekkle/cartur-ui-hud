@@ -132,6 +132,20 @@ namespace CarturUIHud
         // is what lets a controller still reach them.
         internal const int QuickRow = 5;
         internal const int QuiverRow = 6;
+        internal const int KeyRow = 7;
+
+        // The pouch cells seated in the strip, in strip order; the pad's column is the place in this list.
+        private static readonly List<Slots.Slot> s_shownPouch = new List<Slots.Slot>();
+        internal static bool KeysOpen => s_keyStrip != null && s_keyStrip.gameObject.activeSelf;
+
+        /// <summary>Opens the pouch strip for a controller. False when it was already open or does not exist.</summary>
+        internal static bool OpenKeys()
+        {
+            if (s_keyStrip == null || s_keyStrip.gameObject.activeSelf)
+                return false;
+            s_keyStrip.gameObject.SetActive(true);
+            return true;
+        }
 
         internal static bool PanelCell(Slots.Slot slot, out int column, out int row)
         {
@@ -149,6 +163,12 @@ namespace CarturUIHud
                 column = slot.Index - 16;
                 row = QuiverRow;
                 return true;
+            }
+            if (slot.Kind == Slots.Kind.Pouch)
+            {
+                column = s_shownPouch.IndexOf(slot);
+                row = KeyRow;
+                return column >= 0 && KeysOpen;
             }
             Vector2 cell;
             if (!s_padCells.TryGetValue(slot.Id, out cell))
@@ -201,6 +221,9 @@ namespace CarturUIHud
             // they go with it. Nothing is cached across an Awake.
             s_panel = null;
             s_quiverStrip = null;
+            s_keyStrip = null;
+            s_keyButton = null;
+            s_keyIcon = null;
             s_hidden = null;
             s_logged = false;
         }
@@ -235,6 +258,10 @@ namespace CarturUIHud
                 return;
 
             int first = Slots.VisibleCells;
+            int pouchNext = 0;
+            bool pouchEmptySeated = false;
+            s_shownPouch.Clear();
+            ItemDrop.ItemData firstKey = null;
             for (int i = 0; i + first < elements.Count && i < Slots.SlotCount; i++)
             {
                 InventoryElement element = elements[first + i];
@@ -258,6 +285,22 @@ namespace CarturUIHud
                         Park(element.gameObject, hidden);
                     continue;
                 }
+                if (slot.Kind == Slots.Kind.Pouch)
+                {
+                    // Only the keys held, then one empty cell to drop the next into. The cells stay seated in the
+                    // strip even while it is closed, so a key never leaves its hidden-row cell.
+                    ItemDrop.ItemData held = slot.Item;
+                    if (held == null && pouchEmptySeated)
+                    {
+                        Park(element.gameObject, hidden);
+                        continue;
+                    }
+                    pouchEmptySeated |= held == null;
+                    firstKey = firstKey ?? held;
+                    SeatInStrip(element, KeyStrip(gui), pouchNext++, null);
+                    s_shownPouch.Add(slot);
+                    continue;
+                }
                 if (slot.Kind == Slots.Kind.Quiver)
                 {
                         SeatInStrip(element, QuiverStrip(gui), slot.Index - QuiverCompat.FirstSlot, slot.Label);
@@ -275,6 +318,8 @@ namespace CarturUIHud
             // Anything past our table - a wider inventory than eight - is parked too.
             for (int i = first + Slots.SlotCount; i < elements.Count; i++)
                 Park(elements[i]?.gameObject, hidden);
+
+            KeyButton(gui, panel, firstKey, pouchNext);
 
             if (!s_logged)
             {
@@ -459,6 +504,91 @@ namespace CarturUIHud
         /// own so it can be dragged separately.
         /// </summary>
         private static RectTransform s_quiverStrip;
+
+        // ---- the key pouch -------------------------------------------------------------------
+        // A button on the board's empty wood under Legs (spot A, 177 x 1160 in the art's pixels, one box pitch
+        // below Legs) that opens a strip of the held keys. The art has no box there, so the button draws a plain
+        // plate; it shows the first key held, or a Crypt Key when the pouch is empty.
+        private const string KeyStripName = "CarturUI_KeyStrip";
+        private const string KeyButtonName = "CarturUI_KeysButton";
+        private static readonly Vector2 s_keyButtonCell = new Vector2(177f, 1160f);
+        private static RectTransform s_keyStrip, s_keyButton;
+        private static Image s_keyIcon;
+
+        private static RectTransform KeyStrip(InventoryGui gui)
+        {
+            if (s_keyStrip != null)
+                return s_keyStrip;
+            RectTransform panel = Panel(gui);
+            if (panel == null)
+                return null;
+
+            var go = new GameObject(KeyStripName, typeof(RectTransform));
+            var strip = (RectTransform)go.transform;
+            strip.SetParent(gui.m_player, false);
+            strip.anchorMin = strip.anchorMax = new Vector2(1f, 1f);
+            strip.pivot = new Vector2(0f, 1f);
+            strip.sizeDelta = new Vector2(Margin * 2f + Cell, Margin * 2f + Cell);
+            // Under where the quiver strip hangs, so the two never share a place.
+            strip.anchoredPosition = panel.anchoredPosition - new Vector2(0f, PanelHeight + 8f + Margin * 2f + Cell + 8f);
+
+            Canvas canvas = gui.GetComponentInParent<Canvas>();
+            Frame(strip, canvas != null ? canvas.referencePixelsPerUnit : 100f);
+
+            HudLayout.Register(InventoryScreen.Owner, "keypouch", "Key pouch", strip, strip, strip.anchoredPosition);
+
+            go.SetActive(false);
+            s_keyStrip = strip;
+            return strip;
+        }
+
+        private static void KeyButton(InventoryGui gui, RectTransform panel, ItemDrop.ItemData firstKey, int shown)
+        {
+            RectTransform strip = KeyStrip(gui);
+            if (strip == null || panel == null)
+                return;
+            strip.sizeDelta = new Vector2(Margin * 2f + Cell + Pitch * (Mathf.Max(1, shown) - 1), Margin * 2f + Cell);
+
+            if (s_keyButton == null)
+            {
+                var go = new GameObject(KeyButtonName, typeof(RectTransform), typeof(Image), typeof(Button));
+                s_keyButton = (RectTransform)go.transform;
+                s_keyButton.SetParent(panel, false);
+                s_keyButton.anchorMin = s_keyButton.anchorMax = new Vector2(0f, 1f);
+                s_keyButton.pivot = new Vector2(0.5f, 0.5f);
+                s_keyButton.sizeDelta = new Vector2(BoxUnits, BoxUnits);
+                s_keyButton.anchoredPosition = new Vector2(s_keyButtonCell.x * Scale, -s_keyButtonCell.y * Scale);
+                go.GetComponent<Image>().color = new Color(0.07f, 0.06f, 0.05f, 0.85f);
+                go.GetComponent<Button>().onClick.AddListener(() => strip.gameObject.SetActive(!strip.gameObject.activeSelf));
+
+                var icon = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+                var rt = (RectTransform)icon.transform;
+                rt.SetParent(s_keyButton, false);
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.offsetMin = new Vector2(6f, 6f);
+                rt.offsetMax = new Vector2(-6f, -6f);
+                s_keyIcon = icon.GetComponent<Image>();
+                s_keyIcon.raycastTarget = false;
+            }
+
+            Sprite want = firstKey?.GetIcon();
+            if (want == null)
+                want = ObjectDB.instance?.GetItemPrefab("CryptKey")?.GetComponent<ItemDrop>()?.m_itemData.GetIcon();
+            if (s_keyIcon != null && s_keyIcon.sprite != want)
+                s_keyIcon.sprite = want;
+            if (s_keyIcon != null)
+                s_keyIcon.color = firstKey != null ? Color.white : new Color(1f, 1f, 1f, 0.45f);
+        }
+
+        // The pouch goes away with the bag.
+        [HarmonyPatch(typeof(InventoryGui), "Hide")]
+        [HarmonyPostfix]
+        private static void CloseKeys()
+        {
+            if (s_keyStrip != null)
+                s_keyStrip.gameObject.SetActive(false);
+        }
 
         private static RectTransform QuiverStrip(InventoryGui gui)
         {

@@ -39,7 +39,7 @@ namespace CarturUIHud
     internal static class Slots
     {
         // Pov: a Path of Valheiman cell kept for it (PovCompat); Id is PoV's cell id.
-        internal enum Kind { Equipment, Shield, Quick, Quiver, Pov }
+        internal enum Kind { Equipment, Shield, Quick, Quiver, Pov, Pouch }
 
         internal sealed class Slot
         {
@@ -96,6 +96,8 @@ namespace CarturUIHud
                 // PoV decides what its cells take and whether they are open (a belt opens food cells).
                 if (Kind == Kind.Pov)
                     return PovCompat.Accepts(Id, item);
+                if (Kind == Kind.Pouch)
+                    return KeyNames.Contains(item.m_shared.m_name) || item.m_shared.m_itemType == ItemDrop.ItemData.ItemType.Utility;
                 return Kind == Kind.Quick ? IsFood(item) : item.m_shared.m_itemType == Type;
             }
 
@@ -140,6 +142,13 @@ namespace CarturUIHud
         /// </summary>
         internal static int HiddenCells => HiddenRows * Width;
 
+        // The key pouch: the hidden cells EAQS left empty, the same eight Rune UI's pouch uses, so a character
+        // moving between the two keeps its keys where they are. Door.HaveKey walks the whole inventory, hidden
+        // rows included, so a key sitting in one of these still opens its door.
+        internal static readonly int[] PouchIndices = { 7, 14, 15, 19, 20, 21, 22, 23 };
+        internal static readonly HashSet<string> KeyNames = new HashSet<string>();
+        internal static readonly List<string> KeyPrefabs = new List<string>();
+
         internal static readonly Slot[] All = BuildTable();
 
         private static Slot[] BuildTable()
@@ -165,6 +174,10 @@ namespace CarturUIHud
             for (int i = 0; i < 3; i++)
                 table[QuiverCompat.FirstSlot + i] = new Slot("Quiver" + (i + 1),
                     QuiverCompat.FirstSlot + i, "Ammo", Kind.Quiver, ItemDrop.ItemData.ItemType.Ammo);
+
+            for (int i = 0; i < PouchIndices.Length; i++)
+                table[PouchIndices[i]] = new Slot("Pouch" + (i + 1), PouchIndices[i], "Keys", Kind.Pouch,
+                    ItemDrop.ItemData.ItemType.None);
 
             for (int i = 0; i < PovCompat.Cells.Length; i++)
                 table[BaseSlotCount + i] = new Slot(PovCompat.Cells[i], BaseSlotCount + i, PovCompat.Cells[i],
@@ -192,6 +205,41 @@ namespace CarturUIHud
             return d != null
                 && d.m_itemType == ItemDrop.ItemData.ItemType.Consumable
                 && d.m_food > 0f;
+        }
+
+        // The key set is read from the game, not written down (the same two sources as Rune UI's pouch): every
+        // Door prefab in ZNetScene names its key in Door.m_keyItem (BloodGoldKey, CryptKey, DvergrKey), and
+        // Hildir's three quest keys are the only ItemType.Misc items with "Key" in the prefab name. Called from the
+        // Player.Awake postfix; ZNetScene and ObjectDB are up long before a player spawns.
+        internal static void InitKeys()
+        {
+            if (KeyNames.Count > 0 || ZNetScene.instance == null || ObjectDB.instance == null)
+                return;
+            var seen = new SortedDictionary<string, string>();
+            foreach (GameObject prefab in ZNetScene.instance.m_prefabs)
+            {
+                if (prefab == null)
+                    continue;
+                foreach (Door door in prefab.GetComponentsInChildren<Door>(true))
+                {
+                    ItemDrop.ItemData.SharedData key = door.m_keyItem?.m_itemData?.m_shared;
+                    if (key != null && !seen.ContainsKey(key.m_name))
+                        seen[key.m_name] = door.m_keyItem.gameObject.name;
+                }
+            }
+            foreach (GameObject prefab in ObjectDB.instance.m_items)
+            {
+                ItemDrop.ItemData.SharedData d = prefab?.GetComponent<ItemDrop>()?.m_itemData?.m_shared;
+                if (d != null && d.m_itemType == ItemDrop.ItemData.ItemType.Misc
+                    && prefab.name.IndexOf("Key", System.StringComparison.Ordinal) >= 0 && !seen.ContainsKey(d.m_name))
+                    seen[d.m_name] = prefab.name;
+            }
+            foreach (KeyValuePair<string, string> kv in seen)
+            {
+                KeyNames.Add(kv.Key);
+                KeyPrefabs.Add(kv.Value);
+            }
+            SlotPatches.Log.LogInfo("keys read from ZNetScene doors and ObjectDB: " + (KeyPrefabs.Count == 0 ? "none" : string.Join(", ", KeyPrefabs)));
         }
 
         internal static Slot Shield => All[6];
